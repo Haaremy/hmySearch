@@ -1,5 +1,6 @@
 'use client'
 
+import { Button, TextInput } from '@haaremy/hmydesign'
 import { useState } from 'react'
 
 type Result = {
@@ -23,23 +24,23 @@ export default function Home() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">🔍 Websuche</h1>
+    <div>
+      <h1 className="text-3xl font-bold mb-6">hmySuche</h1>
 
       <div className="flex gap-2 mb-6">
-        <input
+        <TextInput
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && search()}
           className="border p-2 w-full rounded"
           placeholder="Suchbegriff eingeben…"
         />
-        <button
+        <Button
           onClick={search}
           className="bg-black text-white px-4 rounded"
         >
-          Suchen
-        </button>
+          🔍
+        </Button>
       </div>
 
       {loading && <p>Suche läuft…</p>}
@@ -47,7 +48,7 @@ export default function Home() {
       <ul className="space-y-4">
         {results.map(r => (
           <li key={r.id} className="border-b pb-3">
-            <a href={r.url} className="text-blue-600 font-semibold">
+            <a href={r.url} className="font-semibold">
               {r.title || r.url}
             </a>
             {r.highlight && (
@@ -59,6 +60,6 @@ export default function Home() {
           </li>
         ))}
       </ul>
-    </main>
+    </div>
   )
 }
