@@ -36,6 +36,7 @@ export default function Home() {
           placeholder="Suchbegriff eingeben…"
         />
         <Button
+          variant="primary"
           onClick={search}
           className="bg-black text-white px-4 rounded"
         >
