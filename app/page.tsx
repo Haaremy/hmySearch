@@ -1,6 +1,5 @@
 'use client'
 
-import { Button, Main, TextInput } from '@haaremy/hmydesign'
 import { useState } from 'react'
 
 type Result = {
@@ -16,51 +15,62 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
 
   async function search() {
+    if (!q.trim()) return
     setLoading(true)
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
-    const data = await res.json()
-    setResults(data.hits)
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+      const data = await res.json()
+      setResults(data.hits)
+    } catch (err) {
+      console.error('Fehler bei der Suche:', err)
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <Main>
-      <h1 className="text-3xl font-bold mb-6">hmySuche</h1>
+    <div className="max-w-3xl mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">🔍 hmySuche</h1>
 
       <div className="flex gap-2 mb-6">
-        <TextInput
+        <input
+          type="text"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && search()}
-          className="border p-2 w-full rounded"
           placeholder="Suchbegriff eingeben…"
+          className="flex-1 border border-gray-300 dark:border-gray-700 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-800 dark:text-gray-100"
         />
-        <Button
-          variant="primary"
+        <button
           onClick={search}
-          className="bg-black text-white px-4 rounded"
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition-colors"
         >
           🔍
-        </Button>
+        </button>
       </div>
 
-      {loading && <p>Suche läuft…</p>}
+      {loading && <p className="text-gray-700 dark:text-gray-300 mb-4">Suche läuft…</p>}
 
       <ul className="space-y-4">
         {results.map(r => (
-          <li key={r.id} className="border-b pb-3">
-            <a href={r.url} className="font-semibold">
+          <li key={r.id} className="border-b border-gray-200 dark:border-gray-700 pb-3">
+            <a
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+            >
               {r.title || r.url}
             </a>
             {r.highlight && (
               <p
-                className="text-sm text-gray-700"
+                className="text-sm text-gray-700 dark:text-gray-300 mt-1"
                 dangerouslySetInnerHTML={{ __html: r.highlight }}
               />
             )}
           </li>
         ))}
       </ul>
-    </Main>
+    </div>
   )
 }
