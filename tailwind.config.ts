@@ -4,7 +4,7 @@ module.exports = {
   content: [
     './app/**/*.{js,ts,jsx,tsx}',
     './components/**/*.{js,ts,jsx,tsx}',
-    './node_modules/@haaremy/hmydesign/**/*.{js,ts,jsx,tsx}', // <- Paketinhalt
+    './node_modules/@haaremy/hmydesign/dist/**/*.{js,ts,jsx,tsx}',
   ],
   theme: {
     extend: {},
