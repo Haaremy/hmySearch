@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button } from '@haaremy/hmydesign'
+import { Button, TextInput, Main } from '@haaremy/hmydesign'
 
 type Result = {
   id: string
@@ -30,8 +30,9 @@ export default function Home() {
   }
 
   return (
+    <Main>
     <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">🔍 hmySuche</h1>
+      <h1 className="text-3xl font-bold mb-6 text-gray-900 dark:text-gray-100">hmySuche</h1>
 
       <div className="flex gap-2 mb-6">
         <input
@@ -73,5 +74,6 @@ export default function Home() {
         ))}
       </ul>
     </div>
+    </Main>
   )
 }
