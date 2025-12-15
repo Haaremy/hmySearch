@@ -19,7 +19,7 @@ export default async function RootLayout({
   //}
 
   return (
-    <html lang="de">
+    <html lang="de" className='dark'>
       <body>
           {children}
       </body>
