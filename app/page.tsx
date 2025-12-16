@@ -64,7 +64,7 @@ export default function SearchPage() {
           {suggestions.map(s => (
             <Button
               key={s}
-              variant="secondary"
+              variant="primary"
               onClick={() => { setQ(s); search() }}
               className="text-xs px-2 py-1"
             >
