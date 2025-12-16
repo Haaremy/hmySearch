@@ -74,12 +74,15 @@ export default function Home() {
             Vorschläge:{' '}
             {suggestions.map((s) => (
               <button
-                key={s}
-                className="text-blue-600 dark:text-blue-400 hover:underline mr-2"
-                onClick={() => setQ(s) || search(0)}
-              >
-                {s}
-              </button>
+  key={s}
+  className="text-blue-600 dark:text-blue-400 hover:underline mr-2"
+  onClick={() => {
+    setQ(s)
+    search(0)
+  }}
+>
+  {s}
+</button>
             ))}
           </div>
         )}
