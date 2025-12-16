@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { es } from '@/lib/elasticsearch'
-import { SearchHit } from '@elastic/elasticsearch/lib/api/types'
 
 export const runtime = 'nodejs'
 
@@ -41,7 +40,7 @@ export async function GET(req: NextRequest) {
     })
 
     const hits = result.hits.hits
-      .filter((hit) => hit._source) // einfache Filterung
+      .filter((hit) => hit._source)
       .map((hit) => {
         const source = hit._source as PageDocument
         return {
