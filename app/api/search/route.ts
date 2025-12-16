@@ -27,11 +27,22 @@ function extractEntities(text: string): Entity[] {
   const doc = nlp(text)
   const entities: Entity[] = []
 
-  doc.people().out('array').forEach((p) => entities.push({ text: p, type: 'Person' }))
-  doc.places().out('array').forEach((p) => entities.push({ text: p, type: 'Place' }))
-  doc.organizations().out('array').forEach((o) => entities.push({ text: o, type: 'Organization' }))
-  doc.numbers().out('array').forEach((n) => entities.push({ text: n, type: 'Number' }))
-
+//  doc.people().out('array').forEach((p) => entities.push({ text: p, type: 'Person' }))
+ // doc.places().out('array').forEach((p) => entities.push({ text: p, type: 'Place' }))
+  //doc.organizations().out('array').forEach((o) => entities.push({ text: o, type: 'Organization' }))
+  //doc.numbers().out('array').forEach((n) => entities.push({ text: n, type: 'Number' }))
+doc.people().out('array').forEach((p: string) =>
+  entities.push({ text: p, type: 'Person' })
+)
+doc.places().out('array').forEach((p: string) =>
+  entities.push({ text: p, type: 'Place' })
+)
+doc.organizations().out('array').forEach((o: string) =>
+  entities.push({ text: o, type: 'Organization' })
+)
+doc.numbers().out('array').forEach((n: string) =>
+  entities.push({ text: n, type: 'Number' })
+)
   return entities
 }
 
@@ -86,12 +97,16 @@ export async function GET(req: NextRequest) {
     })
 
     const hits = result.hits.hits
-      .filter(
-        (hit): hit is { _id: string; _score?: number; _source: PageDocument; highlight?: any } =>
-          !!hit._source
-      )
-      .map((hit) => {
-        const source = hit._source
+  .filter(hit => hit._source) // einfach prüfen, dass _source existiert
+  .map(hit => ({
+    id: hit._id,
+    score: hit._score ?? 0,
+    url: hit._source!.url,
+    canonical: hit._source!.canonical ?? hit._source!.url,
+    title: hit._source!.title,
+    body: hit._source!.body,
+    highlight: hit.highlight?.body?.[0] ?? null,
+  }))
 
         // ----- Ranking Faktoren -----
         const matchScore = hit._score ?? 0
@@ -137,8 +152,8 @@ export async function GET(req: NextRequest) {
           },
           entities: extractEntities(source.body ?? ''),
           finalScore,
-        }
-      })
+        };
+      });
       .sort((a, b) => b.finalScore - a.finalScore)
 
     // ----- Generiere Vorschläge -----
@@ -157,3 +172,4 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Search failed' }, { status: 500 })
   }
 }
+	
