@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { es } from '@/lib/elasticsearch'
+import { SearchHit } from '@elastic/elasticsearch/lib/api/types'
 
 export const runtime = 'nodejs'
 
@@ -10,7 +11,7 @@ type PageDocument = {
   body?: string
   language?: string
   popularity?: number
-  [key: string]: any // für weitere Metadaten
+  [key: string]: any
 }
 
 export async function GET(req: NextRequest) {
@@ -40,18 +41,21 @@ export async function GET(req: NextRequest) {
     })
 
     const hits = result.hits.hits
-      .filter((hit): hit is { _source: PageDocument; _id: string; _score?: number; highlight?: any } => !!hit._source)
-      .map((hit) => ({
-        id: hit._id,
-        score: hit._score ?? 0,
-        url: hit._source.url,
-        canonical: hit._source.canonical ?? hit._source.url,
-        title: hit._source.title ?? '',
-        body: hit._source.body ?? '',
-        language: hit._source.language ?? null,
-        popularity: hit._source.popularity ?? null,
-        highlight: hit.highlight?.body?.[0] ?? hit.highlight?.title?.[0] ?? null,
-      }))
+      .filter((hit) => hit._source) // einfache Filterung
+      .map((hit) => {
+        const source = hit._source as PageDocument
+        return {
+          id: hit._id,
+          score: hit._score ?? 0,
+          url: source.url,
+          canonical: source.canonical ?? source.url,
+          title: source.title ?? '',
+          body: source.body ?? '',
+          language: source.language ?? null,
+          popularity: source.popularity ?? null,
+          highlight: hit.highlight?.body?.[0] ?? hit.highlight?.title?.[0] ?? null,
+        }
+      })
 
     return NextResponse.json({ hits })
   } catch (err) {
