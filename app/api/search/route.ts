@@ -153,13 +153,21 @@ export async function GET(req: NextRequest) {
 
     const allKeywords = hits.flatMap((h) => [...(h.tags ?? []), ...(h.meta_keywords ?? [])])
     const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
+    const totalHits =  typeof result.hits.total === 'number' ? result.hits.total : result.hits.total?.value ?? 0;
 
+return NextResponse.json({
+  hits,
+  suggestions,
+  page,
+  size,
+  total: totalHits,
+})
     return NextResponse.json({
       hits,
       suggestions,
       page,
       size,
-      total: result.hits.total?.value ?? 0,
+      total: totalHits,
     })
   } catch (err) {
     console.error('Elasticsearch error:', err)
