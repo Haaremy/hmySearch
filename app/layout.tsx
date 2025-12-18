@@ -1,10 +1,17 @@
 import {Main} from '@cooperateDesign';
 import './globals.css';
+import { Metadata } from 'next';
 //import { authOptions } from './api/auth/[...nextauth]/route';
 //import { getServerSession } from 'next-auth';
 //import { redirect } from 'next/navigation';
 //import "./globals.css";
-
+export const metadata: Metadata = {
+  title: "Websuche",
+  description: "Websuche im deutschen und englischen Raum. Website und Implementierung von @Haaremy.",
+   icons: {
+    icon: "/logo.svg",
+  },
+};
 
 export default async function RootLayout({
   children,

@@ -20,8 +20,8 @@
     ],
     "paths": {
       "@/*": ["./*"],
-      "@cooperateDesign": ["./cooperateDesign/index.ts"],
-      "@cooperateDesign/*": ["./cooperateDesign/*"]
+      "@cooperateDesign": ["./hmyDesign/cooperateDesign/index.ts"],
+      "@cooperateDesign/*": ["./haaremyDesign/cooperateDesign/*"]
 
     }
   },

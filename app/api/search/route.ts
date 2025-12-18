@@ -1,3 +1,4 @@
+// app/api/search/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { es } from '@/lib/elasticsearch'
 import nlp from 'compromise'
@@ -7,22 +8,22 @@ export const runtime = 'nodejs'
 
 type PageDocument = {
   url: string
-  canonical?: string
   title?: string
   body?: string
   lang?: string
-  views?: number
   updated_at?: string
-  meta_description?: string
   meta_keywords?: string[]
   tags?: string[]
+  views?: number
 }
+
 type Entity = { text: string; type: 'Person' | 'Place' | 'Organization' | 'Number' | 'Other' }
 
 function extractEntities(text: string): Entity[] {
   const doc = nlp(text)
   const entities: Entity[] = []
-doc.people().out('array').forEach((p: string) =>
+
+ doc.people().out('array').forEach((p: string) =>
   entities.push({ text: p, type: 'Person' })
 )
 
@@ -70,6 +71,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(0, Number(searchParams.get('page') ?? 0))
     const size = Math.min(Number(searchParams.get('size') ?? 10), 50)
 
+    // Elasticsearch-Suche
     const result = await es.search<PageDocument>({
       index: 'pages',
       from: page * size,
@@ -91,20 +93,25 @@ export async function GET(req: NextRequest) {
       timeout: '2s',
     })
 
-    const topHits = result.hits.hits.filter(hit => hit._source).slice(0, 10) // nur die Top 10 für teure Berechnungen
+    const topHits = result.hits.hits.filter(hit => hit._source).slice(0, 10)
 
     const hits = topHits.map(hit => {
       const source = hit._source!
-      const entities = extractEntities(source.body ?? '') // nur Top 10
+      const body = source.body ?? ''
+      const lang = source.lang ?? 'unknown'
+      const updated_at = source.updated_at ?? ''
+
+      const entities = extractEntities(body)
       const matchScore = hit._score ?? 0
       const popularityScore = Math.log1p(source.views ?? 0)
-      const freshnessScore = source.updated_at
-        ? 1 / (1 + (Date.now() - new Date(source.updated_at).getTime()) / 86400000)
+      const freshnessScore = updated_at
+        ? 1 / (1 + (Date.now() - new Date(updated_at).getTime()) / 86400000)
         : 0
       const tagScore = source.tags?.reduce((acc, t) => (query.includes(t) ? acc + 2 : acc), 0) ?? 0
       const keywordScore = source.meta_keywords?.reduce((acc, k) => (query.includes(k) ? acc + 1.5 : acc), 0) ?? 0
-      const contentLengthScore = Math.min((source.body?.length ?? 0) / 1000, 5)
+      const contentLengthScore = Math.min(body.length / 1000, 5)
       const entityScore = entities.reduce((acc, e) => (query.includes(e.text) ? acc + 2 : acc), 0)
+
       const finalScore =
         matchScore * 1.5 +
         popularityScore * 2 +
@@ -117,26 +124,25 @@ export async function GET(req: NextRequest) {
       return {
         id: hit._id,
         url: source.url,
-        canonical: source.canonical ?? source.url,
         title: source.title ?? '',
-        body: source.body ?? '',
-        lang: source.lang ?? 'unknown',
-        meta_description: source.meta_description ?? '',
-        meta_keywords: source.meta_keywords ?? [],
+        body,
+        lang,
+        updated_at,
         tags: source.tags ?? [],
-        popularity: source.views ?? 0,
-        updated_at: source.updated_at ?? '',
+        meta_keywords: source.meta_keywords ?? [],
+        views: source.views ?? 0,
+        entities,
+        finalScore,
         highlight: {
           title: Array.isArray(hit.highlight?.title) ? hit.highlight.title[0] : null,
           body: Array.isArray(hit.highlight?.body) ? hit.highlight.body[0] : null,
         },
-        entities,
-        finalScore,
       }
     })
 
     const allKeywords = hits.flatMap(h => [...(h.tags ?? []), ...(h.meta_keywords ?? [])])
     const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
+
     const totalHits =
       typeof result.hits.total === 'number'
         ? result.hits.total
@@ -144,7 +150,10 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ hits, suggestions, page, size, total: totalHits })
   } catch (err) {
-    console.error('Elasticsearch error:', err)
-    return NextResponse.json({ hits: [], suggestions: [], page: 0, size: 0, total: 0, error: 'Search failed' }, { status: 500 })
+    console.error('Search API error:', err)
+    return NextResponse.json(
+      { hits: [], suggestions: [], page: 0, size: 0, total: 0, error: 'Search failed' },
+      { status: 500 },
+    )
   }
 }
