@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Main } from '@haaremy/hmydesign'
+import { Button } from '@haaremy/hmydesign'
 
 type Entity = {
   text: string
@@ -32,7 +32,7 @@ export default function SearchPage() {
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
       const data = await res.json()
-      setResults(data.hits)
+      setResults(data.hits ?? [])
     } catch (err) {
       console.error('Fehler bei der Suche:', err)
     } finally {
@@ -41,7 +41,6 @@ export default function SearchPage() {
   }
 
   return (
-    <Main>
       <div className="max-w-xl mx-auto p-4">
         {/* Überschrift */}
         <h1 className="text-2xl font-semibold mb-4 text-gray-900 dark:text-gray-100">hmySuche</h1>
@@ -142,6 +141,5 @@ export default function SearchPage() {
           )}
         </div>
       </div>
-    </Main>
   )
 }

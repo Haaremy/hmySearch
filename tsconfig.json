@@ -19,7 +19,10 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@cooperateDesign": ["./cooperateDesign/index.ts"],
+      "@cooperateDesign/*": ["./cooperateDesign/*"]
+
     }
   },
   "include": [

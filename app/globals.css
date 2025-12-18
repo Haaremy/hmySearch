@@ -1,4 +1,1 @@
 @import 'tailwindcss';
-@tailwind base;       /* Normales CSS, Normalize, Resets */
-@tailwind components; /* @apply etc. für eigene Komponenten */
-@tailwind utilities;  /* Alle Utility-Klassen wie p-4, text-gray-900 */

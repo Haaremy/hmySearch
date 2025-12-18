@@ -17,48 +17,42 @@ type PageDocument = {
   meta_keywords?: string[]
   tags?: string[]
 }
+type Entity = { text: string; type: 'Person' | 'Place' | 'Organization' | 'Number' | 'Other' }
 
-type Entity = {
-  text: string
-  type: 'Person' | 'Place' | 'Organization' | 'Number' | 'Other'
-}
-
-// ----- Entity Extraction -----
 function extractEntities(text: string): Entity[] {
   const doc = nlp(text)
   const entities: Entity[] = []
+doc.people().out('array').forEach((p: string) =>
+  entities.push({ text: p, type: 'Person' })
+)
 
-  doc.people().out('array').forEach((p: string) =>
-    entities.push({ text: p, type: 'Person' })
-  )
-  doc.places().out('array').forEach((p: string) =>
-    entities.push({ text: p, type: 'Place' })
-  )
-  doc.organizations().out('array').forEach((o: string) =>
-    entities.push({ text: o, type: 'Organization' })
-  )
-  doc.numbers().out('array').forEach((n: string) =>
-    entities.push({ text: n, type: 'Number' })
-  )
+doc.places().out('array').forEach((p: string) =>
+  entities.push({ text: p, type: 'Place' })
+)
+
+doc.organizations().out('array').forEach((o: string) =>
+  entities.push({ text: o, type: 'Organization' })
+)
+
+doc.numbers().out('array').forEach((n: string) =>
+  entities.push({ text: n, type: 'Number' })
+)
 
   return entities
 }
 
-// ----- Suggestions -----
 function generateSuggestions(query: string, keywords: string[]): string[] {
   const suggestions: string[] = []
 
-  keywords.forEach((k) => {
-    const similarity = stringSimilarity.compareTwoStrings(
-      query.toLowerCase(),
-      k.toLowerCase()
-    )
-    if (similarity > 0.6 && !suggestions.includes(k)) suggestions.push(k)
+  keywords.forEach(k => {
+    if (!suggestions.includes(k)) {
+      const similarity = stringSimilarity.compareTwoStrings(query.toLowerCase(), k.toLowerCase())
+      if (similarity > 0.6) suggestions.push(k)
+    }
   })
 
-  const queryWords = query.split(/\s+/)
-  keywords.forEach((k) => {
-    queryWords.forEach((w) => {
+  query.split(/\s+/).forEach(w => {
+    keywords.forEach(k => {
       if (k.toLowerCase().includes(w.toLowerCase()) && !suggestions.includes(k))
         suggestions.push(k)
     })
@@ -67,13 +61,11 @@ function generateSuggestions(query: string, keywords: string[]): string[] {
   return suggestions.slice(0, 5)
 }
 
-// ----- API Endpoint -----
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const query = searchParams.get('q')?.trim()
-    if (!query || query.length < 2)
-      return NextResponse.json({ hits: [], suggestions: [] })
+    if (!query || query.length < 2) return NextResponse.json({ hits: [], suggestions: [] })
 
     const page = Math.max(0, Number(searchParams.get('page') ?? 0))
     const size = Math.min(Number(searchParams.get('size') ?? 10), 50)
@@ -99,78 +91,60 @@ export async function GET(req: NextRequest) {
       timeout: '2s',
     })
 
-    const hits = result.hits.hits
-      .filter((hit) => hit._source)
-      .map((hit) => {
-        const source = hit._source!
+    const topHits = result.hits.hits.filter(hit => hit._source).slice(0, 10) // nur die Top 10 für teure Berechnungen
 
-        // ----- Ranking -----
-        const matchScore = hit._score ?? 0
-        const popularityScore = Math.log1p(source.views ?? 0)
-        const freshnessScore = source.updated_at
-          ? 1 / (1 + (Date.now() - new Date(source.updated_at).getTime()) / 86400000)
-          : 0
-        const tagScore =
-          source.tags?.reduce((acc, t) => (query.includes(t) ? acc + 2 : acc), 0) ?? 0
-        const keywordScore =
-          source.meta_keywords?.reduce((acc, k) => (query.includes(k) ? acc + 1.5 : acc), 0) ??
-          0
-        const contentLengthScore = Math.min((source.body?.length ?? 0) / 1000, 5)
-        const entityScore = extractEntities(source.body ?? '').reduce(
-          (acc, e) => (query.includes(e.text) ? acc + 2 : acc),
-          0
-        )
-        const finalScore =
-          matchScore * 1.5 +
-          popularityScore * 2 +
-          freshnessScore * 3 +
-          tagScore +
-          keywordScore +
-          contentLengthScore +
-          entityScore
+    const hits = topHits.map(hit => {
+      const source = hit._source!
+      const entities = extractEntities(source.body ?? '') // nur Top 10
+      const matchScore = hit._score ?? 0
+      const popularityScore = Math.log1p(source.views ?? 0)
+      const freshnessScore = source.updated_at
+        ? 1 / (1 + (Date.now() - new Date(source.updated_at).getTime()) / 86400000)
+        : 0
+      const tagScore = source.tags?.reduce((acc, t) => (query.includes(t) ? acc + 2 : acc), 0) ?? 0
+      const keywordScore = source.meta_keywords?.reduce((acc, k) => (query.includes(k) ? acc + 1.5 : acc), 0) ?? 0
+      const contentLengthScore = Math.min((source.body?.length ?? 0) / 1000, 5)
+      const entityScore = entities.reduce((acc, e) => (query.includes(e.text) ? acc + 2 : acc), 0)
+      const finalScore =
+        matchScore * 1.5 +
+        popularityScore * 2 +
+        freshnessScore * 3 +
+        tagScore +
+        keywordScore +
+        contentLengthScore +
+        entityScore
 
-        return {
-          id: hit._id,
-          url: source.url,
-          canonical: source.canonical ?? source.url,
-          title: source.title ?? '',
-          body: source.body ?? '',
-          lang: source.lang ?? 'unknown',
-          meta_description: source.meta_description ?? '',
-          meta_keywords: source.meta_keywords ?? [],
-          tags: source.tags ?? [],
-          popularity: source.views ?? 0,
-          updated_at: source.updated_at ?? '',
-          highlight: {
-            title: Array.isArray(hit.highlight?.title) ? hit.highlight.title[0] : null,
-            body: Array.isArray(hit.highlight?.body) ? hit.highlight.body[0] : null,
-          },
-          entities: extractEntities(source.body ?? ''),
-          finalScore,
-        }
-      })
-      .sort((a, b) => b.finalScore - a.finalScore)
-
-    const allKeywords = hits.flatMap((h) => [...(h.tags ?? []), ...(h.meta_keywords ?? [])])
-    const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
-    const totalHits =  typeof result.hits.total === 'number' ? result.hits.total : result.hits.total?.value ?? 0;
-
-return NextResponse.json({
-  hits,
-  suggestions,
-  page,
-  size,
-  total: totalHits,
-})
-    return NextResponse.json({
-      hits,
-      suggestions,
-      page,
-      size,
-      total: totalHits,
+      return {
+        id: hit._id,
+        url: source.url,
+        canonical: source.canonical ?? source.url,
+        title: source.title ?? '',
+        body: source.body ?? '',
+        lang: source.lang ?? 'unknown',
+        meta_description: source.meta_description ?? '',
+        meta_keywords: source.meta_keywords ?? [],
+        tags: source.tags ?? [],
+        popularity: source.views ?? 0,
+        updated_at: source.updated_at ?? '',
+        highlight: {
+          title: Array.isArray(hit.highlight?.title) ? hit.highlight.title[0] : null,
+          body: Array.isArray(hit.highlight?.body) ? hit.highlight.body[0] : null,
+        },
+        entities,
+        finalScore,
+      }
     })
+
+    const allKeywords = hits.flatMap(h => [...(h.tags ?? []), ...(h.meta_keywords ?? [])])
+    const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
+    const totalHits =
+      typeof result.hits.total === 'number'
+        ? result.hits.total
+        : result.hits.total?.value ?? 0
+
+    return NextResponse.json({ hits, suggestions, page, size, total: totalHits })
   } catch (err) {
     console.error('Elasticsearch error:', err)
-    return NextResponse.json({ error: 'Search failed' }, { status: 500 })
+    return NextResponse.json({ hits: [], suggestions: [], page: 0, size: 0, total: 0, error: 'Search failed' }, { status: 500 })
   }
 }
