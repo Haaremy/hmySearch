@@ -1,4 +1,4 @@
-import {Main} from '@haaremy/hmydesign';
+import {Main} from '@cooperateDesign';
 import './globals.css';
 //import { authOptions } from './api/auth/[...nextauth]/route';
 //import { getServerSession } from 'next-auth';
