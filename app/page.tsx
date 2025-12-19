@@ -1,7 +1,10 @@
-'use client'
-
+import { Suspense } from 'react'
 import SearchClient from './SearchClient'
 
 export default function Page() {
-  return <SearchClient />
+  return (
+    <Suspense fallback={<div>Lade Suche…</div>}>
+      <SearchClient />
+    </Suspense>
+  )
 }
