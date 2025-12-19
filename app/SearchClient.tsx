@@ -131,18 +131,22 @@ export default function SearchClient() {
             {hit.highlight?.body ? (
               <p
                 className="text-sm line-clamp-3 text-gray-700 dark:text-gray-200"
-                dangerouslySetInnerHTML={{ __html: hit.highlight.body }}
+                dangerouslySetInnerHTML={{
+                  __html: typeof hit.highlight.body === 'string' ? hit.highlight.body : '',
+                }}
               />
             ) : (
-              <p className="text-xs italic text-gray-400">
-                Keine Vorschau verfügbar
-              </p>
+              <p className="text-xs italic text-gray-400">Keine Vorschau verfügbar</p>
             )}
 
 
+
             <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
-              {hit.tags?.map(tag => (
-                <span key={tag} className="bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-blue-100 px-2 py-0.5 rounded">
+              {hit.tags?.map((tag: string) => (
+                <span
+                  key={tag}
+                  className="bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-blue-100 px-2 py-0.5 rounded"
+                >
                   {tag}
                 </span>
               ))}
