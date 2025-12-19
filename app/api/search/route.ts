@@ -16,6 +16,7 @@ type PageDocument = {
     width?: number
     height?: number
   }[]
+  tags?: string[]
 }
 
 export async function GET(req: NextRequest) {
@@ -28,8 +29,12 @@ export async function GET(req: NextRequest) {
     const size = Math.min(Number(searchParams.get('size') ?? 20), 20)
 
     if (!query || query.length < 2) {
-      return NextResponse.json({ hits: [], total: 0 })
+      return NextResponse.json({ hits: [], total: 0, page, size })
     }
+
+    // bevorzugte Sprache aus Accept-Language
+    const acceptLang = req.headers.get('accept-language') ?? ''
+    const preferredLang = acceptLang.startsWith('de') ? 'de' : 'en'
 
     /* ----------------------------- WEB SEARCH ---------------------------- */
     if (type === 'web') {
@@ -39,11 +44,50 @@ export async function GET(req: NextRequest) {
         size,
         track_total_hits: true,
         query: {
-          multi_match: {
-            query,
-            fields: ['title^4', 'tags^5', 'meta_keywords^3', 'content^2'],
-            fuzziness: 'AUTO',
-            minimum_should_match: '70%',
+          function_score: {
+            query: {
+              bool: {
+                must: [
+                  {
+                    multi_match: {
+                      query,
+                      fields: [
+                        'tags^5',
+                        'title^4',
+                        'meta_keywords^3',
+                        'content^2',
+                      ],
+                      type: 'best_fields',
+                      operator: 'and', // Stopwords werden ignoriert
+                      fuzziness: 'AUTO',
+                      minimum_should_match: '70%',
+                    },
+                  },
+                ],
+                should: [
+                  {
+                    match_phrase: {
+                      title: { query, boost: 6 },
+                    },
+                  },
+                ],
+              },
+            },
+            functions: [
+              // Sprachboost
+              {
+                filter: { term: { 'lang.keyword': preferredLang } },
+                weight: 2.5,
+              },
+              // Aktualität-Boost
+              {
+                gauss: {
+                  crawl_time: { origin: 'now', scale: '30d', decay: 0.5 },
+                },
+              },
+            ],
+            score_mode: 'sum',
+            boost_mode: 'multiply',
           },
         },
         highlight: {
@@ -59,20 +103,25 @@ export async function GET(req: NextRequest) {
           ? result.hits.total
           : result.hits.total?.value ?? 0
 
-      const hits = result.hits.hits.map(hit => ({
-        id: hit._id,
-        url: hit._source?.url,
-        title:
-          hit.highlight?.title?.[0] ??
-          hit._source?.title ??
-          '',
-        snippet:
-          hit.highlight?.content?.join(' ') ??
-          hit._source?.content?.slice(0, 300) ??
-          '',
-      }))
+      const hits = result.hits.hits.map(hit => {
+        const cleanContent = hit._source?.content?.replace(/<[^>]+>/g, '') ?? ''
+        return {
+          id: hit._id,
+          score: hit._score,
+          url: hit._source?.url,
+          title: hit.highlight?.title?.[0] ?? hit._source?.title ?? '',
+          snippet: hit.highlight?.content?.join(' ') ?? cleanContent.slice(0, 300),
+          lang: hit._source?.lang,
+        }
+      })
 
-      return NextResponse.json({ hits, total })
+      return NextResponse.json({
+        hits,
+        total,
+        page,
+        size,
+        totalPages: Math.ceil(total / size),
+      })
     }
 
     /* ---------------------------- IMAGE SEARCH ---------------------------- */
@@ -90,6 +139,7 @@ export async function GET(req: NextRequest) {
                 multi_match: {
                   query,
                   fields: ['title^2', 'content'],
+                  fuzziness: 'AUTO',
                 },
               },
             ],
@@ -109,10 +159,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         hits: images,
         total: images.length,
+        page,
+        size,
       })
     }
 
-    return NextResponse.json({ hits: [], total: 0 })
+    return NextResponse.json({ hits: [], total: 0, page, size })
   } catch (err) {
     console.error('Search API error:', err)
     return NextResponse.json(
