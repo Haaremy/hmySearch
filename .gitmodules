@@ -1,0 +1,3 @@
+[submodule "hmyDesign"]
+	path = hmyDesign
+	url = git@github.com:Haaremy/hmyDesign.git
