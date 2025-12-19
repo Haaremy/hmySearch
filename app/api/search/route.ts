@@ -54,13 +54,12 @@ export async function GET(req: NextRequest) {
     if (!query || query.length < 2) return NextResponse.json({ hits: [], suggestions: [] })
 
     const size = Math.min(Number(searchParams.get('size') ?? 20), 50)
-    const lastSort = searchParams.get('lastSort')  // für search_after
+    const lastSort = searchParams.get('lastSort') || undefined  // search_after
 
-    // Elasticsearch Query
     const esResult = await es.search<PageDocument>({
       index: 'pages',
       size,
-      track_total_hits: false,  // schneller
+      track_total_hits: false,
       _source: ['url','title','content','tags','meta_keywords','views','updated_at','lang'],
       sort: [{ _id: 'asc' }],
       query: {
@@ -85,7 +84,9 @@ export async function GET(req: NextRequest) {
     const hitsMap: Record<string, typeof hitsRaw[0]> = {}
     hitsRaw.forEach(hit => { hitsMap[hit._source!.url] ||= hit })
     const uniqueHits = Object.values(hitsMap)
-    const topHits = uniqueHits.slice(0, 5)  // Entity Extraction nur für Top 5
+
+    // Entity Extraction nur für Top 5
+    const topHits = uniqueHits.slice(0, 5)
 
     const hits = uniqueHits.map((hit, idx) => {
       const src = hit._source!
@@ -119,7 +120,7 @@ export async function GET(req: NextRequest) {
           title: hit.highlight?.title?.[0] ?? null,
           body: hit.highlight?.content ?? [],
         },
-        sort: hit.sort?.[0] ?? null,  // für search_after
+        sort: hit.sort?.[0] ?? null,
       }
     })
 
