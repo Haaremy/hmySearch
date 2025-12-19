@@ -1,17 +1,13 @@
 'use client'
 
-import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, TextInput } from '@cooperateDesign'
-import { UserMenu } from './components/UserMenu'
 
 type Result = {
   id: string
   url: string
   title: string
-  highlight?: { title?: string; body?: string }
-  tags?: string[]
 }
 
 export default function SearchClient() {
@@ -23,7 +19,7 @@ export default function SearchClient() {
   const [loading, setLoading] = useState(false)
   const [totalResults, setTotalResults] = useState<number | null>(null)
 
-  async function search(term?: string) {
+  const search = async (term?: string) => {
     const query = term ?? q
     if (!query.trim()) return
 
@@ -41,48 +37,34 @@ export default function SearchClient() {
     }
   }
 
-  // initial URL query
   useEffect(() => {
     const urlQ = searchParams.get('q')
     if (urlQ) {
       setQ(urlQ)
       search(urlQ)
     }
-  }, [])
+  }, [searchParams])
 
   return (
-    <div className="flex flex-col items-center w-full px-3 py-4">
-      {/* Header */}
-      <div className="w-full max-w-5xl flex justify-between items-center mb-4">
-        <div className="flex items-center">
-          <Image src="/logo_nobg.svg" alt="logo" width={40} height={40} className="dark:invert" />
-          <h1 className="text-2xl font-bold ml-2"><span className="text-blue-400 dark:text-pink-500">my</span>Search</h1>
-        </div>
-        <UserMenu />
-      </div>
-
-      {/* Suche */}
-      <div className="w-full max-w-xl flex gap-2 mb-3">
-        <TextInput
-          value={q}
-          onChange={e => setQ(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && search()}
-          placeholder="Suchen…"
-          className="flex-1 text-sm px-3 py-2"
-        />
+    <div>
+      <div className="flex gap-2 mb-3">
+        <TextInput value={q} onChange={e => setQ(e.target.value)} placeholder="Suchen…" />
         <Button onClick={() => search()}>🔍</Button>
       </div>
 
-      {/* Trefferanzeige */}
-      {totalResults !== null && (
-        <div className="w-full max-w-xl mb-3 text-xs text-gray-500">
-          {totalResults} Treffer
-        </div>
-      )}
+      {totalResults !== null && <p>{totalResults} Treffer</p>}
 
-      
+      {loading && <p>Suche läuft…</p>}
 
-      {loading && <p className="mt-4 text-gray-500">Suche läuft…</p>}
+      <ul>
+        {results.map(r => (
+          <li key={r.id}>
+            <a href={r.url} target="_blank" rel="noopener noreferrer">
+              {r.title || r.url}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
