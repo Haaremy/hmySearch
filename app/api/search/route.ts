@@ -53,108 +53,89 @@ export async function GET(req: NextRequest) {
     const query = searchParams.get('q')?.trim()
     if (!query || query.length < 2) return NextResponse.json({ hits: [], suggestions: [] })
 
-    const page = Math.max(0, Number(searchParams.get('page') ?? 0))
     const size = Math.min(Number(searchParams.get('size') ?? 20), 50)
+    const lastSort = searchParams.get('lastSort') || undefined  // search_after
 
-    const result = await es.search<PageDocument>({
+    const esResult = await es.search<PageDocument>({
       index: 'pages',
-      from: page * size,
       size,
+      track_total_hits: false,
+      _source: ['url','title','content','tags','meta_keywords','views','updated_at','lang'],
+      sort: [{ _id: 'asc' }],
       query: {
         multi_match: {
           query,
-          fields: ['title^4', 'content^2', 'meta_keywords^3', 'tags^5'],
+          fields: ['title^4','content^2','meta_keywords^3','tags^5'],
           fuzziness: 'AUTO',
           minimum_should_match: '40%',
         },
       },
       highlight: {
         fields: {
-          title: { fragment_size: 150, number_of_fragments: 1 },
-          content: { fragment_size: 150, number_of_fragments: 2 },
+          title: { fragment_size: 100, number_of_fragments: 1 },
+          content: { fragment_size: 100, number_of_fragments: 1 },
         },
       },
+      ...(lastSort ? { search_after: [lastSort] } : {}),
       timeout: '2s',
     })
 
-    const hitsRaw = result.hits.hits.filter(hit => hit._source)
-
-    // Deduplication nach URL
+    const hitsRaw = esResult.hits.hits.filter(hit => hit._source)
     const hitsMap: Record<string, typeof hitsRaw[0]> = {}
-    hitsRaw.forEach(hit => {
-      const url = hit._source!.url
-      if (!hitsMap[url]) hitsMap[url] = hit
-    })
+    hitsRaw.forEach(hit => { hitsMap[hit._source!.url] ||= hit })
     const uniqueHits = Object.values(hitsMap)
 
-    const hits = uniqueHits.map(hit => {
-      const source = hit._source!
-      const body = source.content ?? ''
-      const lang = source.lang ?? 'unknown'
-      const updated_at = source.updated_at ?? ''
+    // Entity Extraction nur für Top 5
+    const topHits = uniqueHits.slice(0, 5)
 
-      const entities = extractEntities(body)
+    const hits = uniqueHits.map((hit, idx) => {
+      const src = hit._source!
+      const body = src.content ?? ''
+      const updatedAt = src.updated_at ? new Date(src.updated_at).getTime() : 0
+      const entities = idx < 5 ? extractEntities(body) : []
+
       const matchScore = hit._score ?? 0
-      const popularityScore = Math.log1p(source.views ?? 0)
-      const freshnessScore = updated_at
-        ? 1 / (1 + (Date.now() - new Date(updated_at).getTime()) / 86400000)
-        : 0
-      const tagScore = source.tags?.reduce(
-        (acc, t) => (query.toLowerCase().includes(t.toLowerCase()) ? acc + 2 : acc),
-        0,
-      ) ?? 0
-      const keywordScore = source.meta_keywords?.reduce(
-        (acc, k) => (query.toLowerCase().includes(k.toLowerCase()) ? acc + 1.5 : acc),
-        0,
-      ) ?? 0
-      const contentLengthScore = Math.min(body.length / 1000, 5)
-      const entityScore = entities.reduce(
-        (acc, e) => (query.toLowerCase().includes(e.text.toLowerCase()) ? acc + 2 : acc),
-        0,
-      )
+      const popularityScore = Math.log1p(src.views ?? 0)
+      const freshnessScore = updatedAt ? 1 / (1 + (Date.now() - updatedAt) / 86400000) : 0
+      const tagScore = src.tags?.reduce((acc,t) => (query.toLowerCase().includes(t.toLowerCase()) ? acc + 2 : acc),0) ?? 0
+      const keywordScore = src.meta_keywords?.reduce((acc,k) => (query.toLowerCase().includes(k.toLowerCase()) ? acc + 1.5 : acc),0) ?? 0
+      const contentLengthScore = Math.min(body.length / 1000,5)
+      const entityScore = entities.reduce((acc,e) => (query.toLowerCase().includes(e.text.toLowerCase()) ? acc + 2 : acc),0)
 
-      const finalScore =
-        matchScore * 1.5 +
-        popularityScore * 2 +
-        freshnessScore * 3 +
-        tagScore +
-        keywordScore +
-        contentLengthScore +
-        entityScore
+      const finalScore = matchScore*1.5 + popularityScore*2 + freshnessScore*3 + tagScore + keywordScore + contentLengthScore + entityScore
 
       return {
         id: hit._id,
-        url: source.url,
-        title: source.title ?? '',
+        url: src.url,
+        title: src.title ?? '',
         body,
-        lang,
-        updated_at,
-        tags: source.tags ?? [],
-        meta_keywords: source.meta_keywords ?? [],
-        views: source.views ?? 0,
+        lang: src.lang ?? 'unknown',
+        updated_at: src.updated_at ?? '',
+        tags: src.tags ?? [],
+        meta_keywords: src.meta_keywords ?? [],
+        views: src.views ?? 0,
         entities,
         finalScore,
         highlight: {
           title: hit.highlight?.title?.[0] ?? null,
           body: hit.highlight?.content ?? [],
         },
+        sort: hit.sort?.[0] ?? null,
       }
     })
 
     const allKeywords = hits.flatMap(h => [...(h.tags ?? []), ...(h.meta_keywords ?? [])])
     const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
 
-    const totalHits =
-      typeof result.hits.total === 'number'
-        ? result.hits.total
-        : result.hits.total?.value ?? 0
-
-    return NextResponse.json({ hits, suggestions, page, size, total: totalHits })
+    return NextResponse.json({
+      hits,
+      suggestions,
+      total: typeof esResult.hits.total === 'number' ? esResult.hits.total : esResult.hits.total?.value ?? 0,
+      size,
+      lastSort: hits[hits.length-1]?.sort ?? null,
+    })
   } catch (err) {
     console.error('Search API error:', err)
-    return NextResponse.json(
-      { hits: [], suggestions: [], page: 0, size: 0, total: 0, error: 'Search failed' },
-      { status: 500 },
-    )
+    return NextResponse.json({ hits: [], suggestions: [], total: 0, size: 0, lastSort: null, error: 'Search failed' }, { status: 500 })
   }
 }
