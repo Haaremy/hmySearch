@@ -6,19 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, TextInput } from '@cooperateDesign'
 import { UserMenu } from './components/UserMenu'
 
-type Highlight = {
-  title?: string | string[]
-  body?: string | string[]
-}
-
 type Result = {
   id: string
   url: string
   title: string
-  highlight?: Highlight
+  highlight?: { title?: string; body?: string }
   tags?: string[]
 }
-
 
 export default function SearchClient() {
   const router = useRouter()
@@ -47,6 +41,7 @@ export default function SearchClient() {
     }
   }
 
+  // initial URL query
   useEffect(() => {
     const urlQ = searchParams.get('q')
     if (urlQ) {
@@ -79,33 +74,28 @@ export default function SearchClient() {
       </div>
 
       {/* Trefferanzeige */}
-      <div className="w-full max-w-xl mb-3 text-xs text-gray-500">
-        {totalResults !== null && <span>{totalResults} Treffer</span>}
-      </div>
+      {totalResults !== null && (
+        <div className="w-full max-w-xl mb-3 text-xs text-gray-500">
+          {totalResults} Treffer
+        </div>
+      )}
 
+      {/* Ergebnisse */}
       <div className="w-full grid gap-3 max-w-xl">
-  {results.map(hit => (
-    <div key={hit.id} className="bg-white dark:bg-gray-800 rounded p-3 shadow-sm w-full">
-      {/* Titel */}
-      <a
-        href={hit.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-base font-medium text-blue-600 dark:text-blue-400 line-clamp-2"
-        dangerouslySetInnerHTML={{
-          __html: hit.title
-        }}
-      />
-
-      <p className="text-xs text-gray-400 truncate mb-1">{hit.url}</p>
-
-    
-
-      
-    </div>
-  ))}
-</div>
-
+        {results.map(hit => (
+          <div key={hit.id} className="bg-white dark:bg-gray-800 rounded p-3 shadow-sm w-full">
+            <a
+              href={hit.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-base font-medium text-blue-600 dark:text-blue-400 line-clamp-2"
+            >
+              {hit.highlight?.title || hit.title || hit.url}
+            </a>
+            <p className="text-xs text-gray-400 truncate mb-1">{hit.url}</p>
+          </div>
+        ))}
+      </div>
 
       {loading && <p className="mt-4 text-gray-500">Suche läuft…</p>}
     </div>
