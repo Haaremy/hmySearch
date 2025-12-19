@@ -72,10 +72,7 @@ export default function SearchClient() {
         <Button onClick={() => search()}>🔍</Button>
       </div>
 
-    {/* Trefferanzeige */}
-      <div className="w-full max-w-xl mb-3 text-xs text-gray-500">
-        {totalResults || 0} Treffer
-      </div>
+  
     
 
  
