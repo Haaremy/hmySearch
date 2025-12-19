@@ -53,6 +53,16 @@ export default function SearchClient() {
       </div>
 
       {loading && <p>Suche läuft…</p>}
+
+      <ul>
+        {results.map(r => (
+          <li key={r.id}>
+            <a href={r.url} target="_blank" rel="noopener noreferrer">
+              {r.title || r.url}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }
