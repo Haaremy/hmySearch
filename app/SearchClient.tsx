@@ -3,29 +3,24 @@
 import Image from 'next/image'
 import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { TextInput, Button } from '@cooperateDesign'
-import { UserMenu } from './components/UserMenu'
-
-/* =======================
-   Types
-======================= */
-
-type Highlight = {
-  title?: string
-  body?: string
-}
+import { Button, TextInput } from '@cooperateDesign'
 
 type Result = {
   id: string
-  url: string
+  url?: string
   title: string
-  highlight?: Highlight
-  tags?: string[]
+  snippet?: string
 }
 
-/* =======================
-   Component
-======================= */
+function getFavicon(url?: string) {
+  if (!url) return null
+  try {
+    const domain = new URL(url).hostname
+    return `https://www.google.com/s2/favicons?sz=32&domain=${domain}`
+  } catch {
+    return null
+  }
+}
 
 export default function SearchClient() {
   const router = useRouter()
@@ -34,20 +29,18 @@ export default function SearchClient() {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Result[]>([])
   const [loading, setLoading] = useState(false)
-  const [total, setTotal] = useState<number>(0)
-
-  /* =======================
-     Search
-  ======================= */
+  const [total, setTotal] = useState(0)
 
   async function search(term?: string) {
-    const query = (term ?? q).trim()
-    if (!query) return
+    const query = term ?? q
+    if (!query.trim()) return
 
     setLoading(true)
 
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`)
+      const res = await fetch(
+        `/api/search?q=${encodeURIComponent(query)}&type=web`
+      )
       const data = await res.json()
 
       setResults(Array.isArray(data.hits) ? data.hits : [])
@@ -55,18 +48,13 @@ export default function SearchClient() {
 
       router.replace(`/?q=${encodeURIComponent(query)}`, { scroll: false })
     } catch (err) {
-      console.error('Search failed', err)
-      setResults([])
-      setTotal(0)
+      console.error('Search error', err)
     } finally {
       setLoading(false)
     }
   }
 
-  /* =======================
-     Initial URL search
-  ======================= */
-
+  // Initiale URL-Suche
   useEffect(() => {
     const urlQ = searchParams.get('q')
     if (urlQ) {
@@ -76,144 +64,73 @@ export default function SearchClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  /* =======================
-     Render
-  ======================= */
-
   return (
     <div className="flex flex-col items-center w-full px-4 py-6">
-      {/* ================= Header ================= */}
-      <div className="w-full max-w-5xl flex justify-between items-center mb-6">
-        <div className="flex items-center gap-2">
-          <Image
-            src="/logo_nobg.svg"
-            alt="logo"
-            width={36}
-            height={36}
-            className="dark:invert"
-          />
-          <h1 className="text-2xl font-bold">
-            <span className="text-blue-400 dark:text-pink-500">my</span>Search
-          </h1>
-        </div>
-        <UserMenu />
-      </div>
-
-      {/* ================= Search Box ================= */}
+      {/* Suche */}
       <div className="w-full max-w-2xl flex gap-2 mb-4">
         <TextInput
           value={q}
           onChange={e => setQ(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && search()}
           placeholder="Suchen…"
-          className="flex-1 text-sm px-4 py-2"
+          className="flex-1"
         />
-        <Button onClick={() => search()} className="px-4">
-          🔍
-        </Button>
+        <Button onClick={() => search()}>Suchen</Button>
       </div>
 
-      {/* ================= Result Count ================= */}
-      <div className="w-full max-w-2xl text-xs text-gray-500 mb-4">
-        {total.toLocaleString()} Treffer
-      </div>
-
-      {/* ================= Sponsored / Recommended ================= */}
-      {results.length > 0 && (
-        <div className="w-full max-w-2xl mb-6">
-          <div className="text-xs uppercase text-gray-400 mb-2">
-            Empfohlen
-          </div>
-
-          <div className="rounded-xl border border-yellow-300 bg-yellow-50 dark:bg-gray-800 p-4">
-            <div className="text-xs text-yellow-600 mb-1">
-              Gesponsert
-            </div>
-            <a
-              href="#"
-              className="text-base font-medium text-blue-700 dark:text-blue-400 hover:underline"
-            >
-              Premium-Eintrag: Technik-Jobs & KI-Projekte
-            </a>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-              Sichtbarkeit für hochwertige Inhalte auf mySearch.
-            </p>
-          </div>
+      {/* Trefferanzahl */}
+      {total > 0 && (
+        <div className="w-full max-w-2xl text-xs text-gray-500 mb-4">
+          {total.toLocaleString()} Treffer
         </div>
       )}
 
-      {/* ================= Results ================= */}
-      <div className="w-full max-w-2xl grid gap-4 overflow-hidden">
-        {results.map(hit => (
-          <div
-            key={hit.id}
-            className="
-              rounded-xl border border-gray-200 dark:border-gray-700
-              p-4 transition
-              hover:shadow-md hover:bg-gray-50 dark:hover:bg-gray-800
-            "
-          >
-            {/* Title */}
-            <a
-              href={hit.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="
-                block text-lg font-medium
-                text-blue-700 dark:text-blue-400
-                hover:underline
-                break-words
-              "
-              dangerouslySetInnerHTML={{
-                __html: hit.highlight?.title ?? hit.title,
-              }}
-            />
+      {/* Ergebnisse */}
+      <div className="w-full max-w-2xl flex flex-col gap-6">
+        {results.map(hit => {
+          const favicon = getFavicon(hit.url)
 
-            {/* URL */}
-            <div className="text-sm text-blue-600 dark:text-blue-300 truncate mt-1">
-              {hit.url}
-            </div>
-
-            {/* Snippet */}
-            {hit.highlight?.body && (
-              <p
-                className="
-                  mt-2 text-sm leading-relaxed
-                  text-pink-600 dark:text-pink-500
-                  break-words
-                "
-                dangerouslySetInnerHTML={{
-                  __html: hit.highlight.body,
-                }}
-              />
-            )}
-
-            {/* Tags */}
-            {hit.tags && hit.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-3 text-xs">
-                {hit.tags.map(tag => (
-                  <span
-                    key={tag}
-                    className="
-                      bg-blue-100 dark:bg-blue-700
-                      text-blue-800 dark:text-blue-100
-                      px-2 py-0.5 rounded
-                    "
-                  >
-                    {tag}
-                  </span>
-                ))}
+          return (
+            <div
+              key={hit.id}
+              className="group rounded-lg px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-800 transition"
+            >
+              {/* URL + Favicon */}
+              <div className="flex items-center gap-2 text-xs text-blue-600 dark:text-blue-400 mb-1 truncate">
+                {favicon && (
+                  <img
+                    src={favicon}
+                    alt=""
+                    className="w-4 h-4 rounded"
+                    loading="lazy"
+                  />
+                )}
+                <span className="truncate">{hit.url}</span>
               </div>
-            )}
-          </div>
-        ))}
+
+              {/* Titel */}
+              <a
+                href={hit.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-base font-medium text-pink-500 dark:text-pink-400 leading-snug mb-1"
+                dangerouslySetInnerHTML={{ __html: hit.title }}
+              />
+
+              {/* Snippet */}
+              {hit.snippet && (
+                <p
+                  className="text-sm text-blue-700 dark:text-blue-300 leading-relaxed line-clamp-3"
+                  dangerouslySetInnerHTML={{ __html: hit.snippet }}
+                />
+              )}
+            </div>
+          )
+        })}
       </div>
 
-      {/* ================= Loading ================= */}
       {loading && (
-        <div className="mt-6 text-sm text-gray-500">
-          Suche läuft…
-        </div>
+        <div className="mt-6 text-sm text-gray-500">Suche läuft…</div>
       )}
     </div>
   )
