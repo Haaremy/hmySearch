@@ -72,7 +72,7 @@ export default function SearchClient() {
     <div className="flex flex-col items-center w-full px-3 py-4">
       {/* Header */}
       <div className="w-full max-w-5xl flex flex-col md:grid md:grid-cols-3 items-center gap-3 mb-4">
-        <div className="hidden md:block" />
+        <div className="" />
 
         <div className="flex items-center">
           <Image
@@ -111,7 +111,7 @@ export default function SearchClient() {
       )}
 
       {/* Ergebnisse */}
-      <div className="w-full max-w-3xl grid gap-3">
+      <div className="w-full grid gap-3 max-w-full">
         {results.map(hit => (
           <div
             key={hit.id}
