@@ -23,39 +23,24 @@ function extractEntities(text: string): Entity[] {
   const doc = nlp(text)
   const entities: Entity[] = []
 
- doc.people().out('array').forEach((p: string) =>
-  entities.push({ text: p, type: 'Person' })
-)
-
-doc.places().out('array').forEach((p: string) =>
-  entities.push({ text: p, type: 'Place' })
-)
-
-doc.organizations().out('array').forEach((o: string) =>
-  entities.push({ text: o, type: 'Organization' })
-)
-
-doc.numbers().out('array').forEach((n: string) =>
-  entities.push({ text: n, type: 'Number' })
-)
+  doc.people().out('array').forEach((p: string) => entities.push({ text: p, type: 'Person' }))
+  doc.places().out('array').forEach((p: string) => entities.push({ text: p, type: 'Place' }))
+  doc.organizations().out('array').forEach((o: string) => entities.push({ text: o, type: 'Organization' }))
+  doc.numbers().out('array').forEach((n: string) => entities.push({ text: n, type: 'Number' }))
 
   return entities
 }
 
 function generateSuggestions(query: string, keywords: string[]): string[] {
   const suggestions: string[] = []
+  const lowerQuery = query.toLowerCase()
 
   keywords.forEach(k => {
-    if (!suggestions.includes(k)) {
-      const similarity = stringSimilarity.compareTwoStrings(query.toLowerCase(), k.toLowerCase())
-      if (similarity > 0.6) suggestions.push(k)
-    }
-  })
-
-  query.split(/\s+/).forEach(w => {
-    keywords.forEach(k => {
-      if (k.toLowerCase().includes(w.toLowerCase()) && !suggestions.includes(k))
-        suggestions.push(k)
+    const lowerK = k.toLowerCase()
+    const similarity = stringSimilarity.compareTwoStrings(lowerQuery, lowerK)
+    if (similarity > 0.6 && !suggestions.includes(k)) suggestions.push(k)
+    lowerQuery.split(/\s+/).forEach(w => {
+      if (lowerK.includes(w) && !suggestions.includes(k)) suggestions.push(k)
     })
   })
 
@@ -71,7 +56,6 @@ export async function GET(req: NextRequest) {
     const page = Math.max(0, Number(searchParams.get('page') ?? 0))
     const size = Math.min(Number(searchParams.get('size') ?? 10), 50)
 
-    // Elasticsearch-Suche
     const result = await es.search<PageDocument>({
       index: 'pages',
       from: page * size,
@@ -93,9 +77,17 @@ export async function GET(req: NextRequest) {
       timeout: '2s',
     })
 
-    const topHits = result.hits.hits.filter(hit => hit._source).slice(0, 10)
+    const hitsRaw = result.hits.hits.filter(hit => hit._source)
 
-    const hits = topHits.map(hit => {
+    // Deduplication nach URL
+    const hitsMap: Record<string, typeof hitsRaw[0]> = {}
+    hitsRaw.forEach(hit => {
+      const url = hit._source!.url
+      if (!hitsMap[url]) hitsMap[url] = hit
+    })
+    const uniqueHits = Object.values(hitsMap)
+
+    const hits = uniqueHits.map(hit => {
       const source = hit._source!
       const body = source.body ?? ''
       const lang = source.lang ?? 'unknown'
@@ -107,10 +99,19 @@ export async function GET(req: NextRequest) {
       const freshnessScore = updated_at
         ? 1 / (1 + (Date.now() - new Date(updated_at).getTime()) / 86400000)
         : 0
-      const tagScore = source.tags?.reduce((acc, t) => (query.includes(t) ? acc + 2 : acc), 0) ?? 0
-      const keywordScore = source.meta_keywords?.reduce((acc, k) => (query.includes(k) ? acc + 1.5 : acc), 0) ?? 0
+      const tagScore = source.tags?.reduce(
+        (acc, t) => (query.toLowerCase().includes(t.toLowerCase()) ? acc + 2 : acc),
+        0,
+      ) ?? 0
+      const keywordScore = source.meta_keywords?.reduce(
+        (acc, k) => (query.toLowerCase().includes(k.toLowerCase()) ? acc + 1.5 : acc),
+        0,
+      ) ?? 0
       const contentLengthScore = Math.min(body.length / 1000, 5)
-      const entityScore = entities.reduce((acc, e) => (query.includes(e.text) ? acc + 2 : acc), 0)
+      const entityScore = entities.reduce(
+        (acc, e) => (query.toLowerCase().includes(e.text.toLowerCase()) ? acc + 2 : acc),
+        0,
+      )
 
       const finalScore =
         matchScore * 1.5 +
@@ -134,8 +135,8 @@ export async function GET(req: NextRequest) {
         entities,
         finalScore,
         highlight: {
-          title: Array.isArray(hit.highlight?.title) ? hit.highlight.title[0] : null,
-          body: Array.isArray(hit.highlight?.body) ? hit.highlight.body[0] : null,
+          title: hit.highlight?.title?.[0] ?? null,
+          body: hit.highlight?.body ?? [],
         },
       }
     })
