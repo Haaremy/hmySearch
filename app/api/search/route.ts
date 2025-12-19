@@ -122,8 +122,10 @@ export async function GET(req: NextRequest) {
               gauss: {
                 updated_at: {
                   scale: '30d',
+                  origin: 'now',
                 },
               },
+              weight: 3,
             },
           ],
           boost_mode: 'sum',
@@ -205,11 +207,12 @@ export async function GET(req: NextRequest) {
       size,
       total,
     })
-  } catch (err) {
-    console.error('Search API error:', err)
-    return NextResponse.json(
-      { hits: [], suggestions: [], total: 0, error: 'Search failed' },
-      { status: 500 },
-    )
-  }
+  } catch (err: unknown) {
+      if (err instanceof Error) {
+        console.error('Search API error:', err.message)
+      } else {
+        console.error('Search API unknown error:', err)
+      }
+    }
+
 }
