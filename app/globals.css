@@ -9,12 +9,12 @@ em {
 
 /* Light mode */
 :root em {
-  background-color: rgb(219 234 254); /* blue-100 */
+  background-color: none;; /* blue-100 */
   color: rgb(29 78 216); /* blue-700 */
 }
 
 /* Dark mode */
 .dark em {
-  background-color: rgb(236 72 153); /* pink-500 */
-  color: white;
+  background-color:  none;/* pink-500 */
+  color: rgb(236 72 153);
 }
