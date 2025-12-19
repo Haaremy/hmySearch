@@ -40,39 +40,44 @@ export async function GET(req: NextRequest) {
         from: page * size,
         size,
         track_total_hits: true,
-        query: {
-          function_score: {
-            query: {
-              bool: {
-                must: [
-                  {
-                    multi_match: {
-                      query,
-                      fields: ['title^4', 'tags^5', 'content^2', 'meta_keywords^3'],
-                      fuzziness: 'AUTO',
-                      minimum_should_match: '70%',
-                    },
-                  },
-                ],
-                should: [
-                  { match_phrase: { title: { query, boost: 6 } } },
-                  { term: { sponsored: true, boost: 5 } } // Sponsored boost
-                ],
-              },
+        // Nur die Query-Definition für Web-Suche
+query: {
+  function_score: {
+    query: {
+      bool: {
+        must: [
+          {
+            multi_match: {
+              query,
+              fields: ['title^4', 'tags^5', 'content^2', 'meta_keywords^3'],
+              fuzziness: 'AUTO',
+              minimum_should_match: '70%',
             },
-            functions: [
-              {
-                filter: { term: { sponsored: true } },
-                weight: 2.5,
-              },
-              {
-                gauss: { crawl_time: { origin: 'now', scale: '30d', decay: 0.5 } },
-              },
-            ],
-            score_mode: 'sum',
-            boost_mode: 'multiply',
           },
-        },
+        ],
+        should: [
+          { match_phrase: { title: { query, boost: 6 } } },
+          {
+            // Sponsored Boost korrekt via function_score Funktion
+            term: { sponsored: true }
+          }
+        ],
+      },
+    },
+    functions: [
+      {
+        filter: { term: { sponsored: true } },
+        weight: 5, // boost für Sponsored
+      },
+      {
+        gauss: { crawl_time: { origin: 'now', scale: '30d', decay: 0.5 } },
+      },
+    ],
+    score_mode: 'sum',
+    boost_mode: 'multiply',
+  },
+},
+
         highlight: {
           fields: {
             title: { number_of_fragments: 1 },
