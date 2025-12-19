@@ -43,7 +43,11 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    const hits = result.hits.hits.map(hit => ({
+    const hits = result.hits.hits.map(hit => {
+    const content = (hit._source?.content ?? '').replace(/<div>|<\/div>|<p>|<\/p>/g, '');
+    const truncatedContent = content.length > 500 ? content.slice(0, 500) + '...' : content;
+
+    return {
       id: hit._id,
       url: hit._source?.url ?? '',
       title: hit._source?.title ?? '',
@@ -55,9 +59,11 @@ export async function GET(req: NextRequest) {
       views: hit._source?.views ?? 0,
       highlight: {
         title: hit.highlight?.title?.[0] ?? null,
-        body: hit.highlight?.content?.join(' ') ?? null, // Array → String
+        body: truncatedContent,
       }
-    }))
+    }
+  });
+
 
     return NextResponse.json({
       hits,

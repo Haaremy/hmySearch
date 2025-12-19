@@ -58,6 +58,8 @@ export default function SearchClient() {
     }
   }
 
+
+
   /** 🔗 Initiale URL-Suche */
   useEffect(() => {
     const urlQ = searchParams.get('q')
