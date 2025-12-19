@@ -9,7 +9,7 @@ type PageDocument = {
   title?: string
   content?: string
   lang?: string
-  updated_at?: string
+  crawl_time?: string
   meta_keywords?: string[]
   tags?: string[]
   views?: number
@@ -23,7 +23,6 @@ export async function GET(req: NextRequest) {
     if (!query || query.length < 2) {
       return NextResponse.json({
         hits: [],
-        suggestions: [],
         total: 0,
         page: 0,
         size: 0,
@@ -33,7 +32,7 @@ export async function GET(req: NextRequest) {
     const page = Math.max(0, Number(searchParams.get('page') ?? 0))
     const size = Math.min(Number(searchParams.get('size') ?? 20), 20)
 
-    // 🌍 Sprache aus Browser ableiten (default: de)
+    // 🌍 bevorzugte Sprache
     const acceptLang = req.headers.get('accept-language') ?? ''
     const preferredLang = acceptLang.startsWith('de') ? 'de' : 'en'
 
@@ -58,12 +57,11 @@ export async function GET(req: NextRequest) {
                       'content^2',
                     ],
                     fuzziness: 'AUTO',
-                    operator: 'and',
+                    minimum_should_match: '70%',
                   },
                 },
               ],
               should: [
-                // 🔥 Phrase-Boost für Titel
                 {
                   match_phrase: {
                     title: {
@@ -79,23 +77,14 @@ export async function GET(req: NextRequest) {
           functions: [
             // 🌍 Sprach-Boost
             {
-              filter: { term: { lang: preferredLang } },
+              filter: { term: { 'lang.keyword': preferredLang } },
               weight: 2.5,
-            },
-
-            // 👀 Popularität (Views)
-            {
-              field_value_factor: {
-                field: 'views',
-                factor: 0.1,
-                missing: 1,
-              },
             },
 
             // 🕒 Aktualität
             {
               gauss: {
-                updated_at: {
+                crawl_time: {
                   origin: 'now',
                   scale: '30d',
                   decay: 0.5,
@@ -111,14 +100,8 @@ export async function GET(req: NextRequest) {
 
       highlight: {
         fields: {
-          title: {
-            fragment_size: 150,
-            number_of_fragments: 1,
-          },
-          content: {
-            fragment_size: 150,
-            number_of_fragments: 2,
-          },
+          title: { number_of_fragments: 1 },
+          content: { number_of_fragments: 2 },
         },
       },
     })
@@ -129,51 +112,35 @@ export async function GET(req: NextRequest) {
         : result.hits.total?.value ?? 0
 
     const hits = result.hits.hits.map(hit => {
-      const rawContent = hit._source?.content ?? ''
-      const cleanContent = rawContent.replace(/<[^>]+>/g, '')
-      const truncatedContent =
-        cleanContent.length > 500
-          ? cleanContent.slice(0, 500) + '…'
-          : cleanContent
+      const cleanContent =
+        hit._source?.content?.replace(/<[^>]+>/g, '') ?? ''
 
       return {
         id: hit._id,
         score: hit._score,
-        url: hit._source?.url ?? '',
+        url: hit._source?.url,
         title:
           hit.highlight?.title?.[0] ??
           hit._source?.title ??
           '',
-        body:
+        snippet:
           hit.highlight?.content?.join(' ') ??
-          truncatedContent,
-        lang: hit._source?.lang ?? 'unknown',
-        updated_at: hit._source?.updated_at ?? '',
+          cleanContent.slice(0, 300),
+        lang: hit._source?.lang,
       }
     })
 
     return NextResponse.json({
       hits,
-      suggestions: [],
       total,
       page,
       size,
       totalPages: Math.ceil(total / size),
     })
-  } catch (err: unknown) {
-    if (err instanceof Error) {
-      console.error('Search API error:', err.message)
-    } else {
-      console.error('Search API unknown error:', err)
-    }
-
+  } catch (err) {
+    console.error('Search API error:', err)
     return NextResponse.json(
-      {
-        hits: [],
-        suggestions: [],
-        total: 0,
-        error: 'Search failed',
-      },
+      { hits: [], total: 0, error: 'Search failed' },
       { status: 500 }
     )
   }
