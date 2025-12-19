@@ -73,11 +73,10 @@ export default function SearchClient() {
       </div>
 
     {/* Trefferanzeige */}
-    {!!totalResults && (
       <div className="w-full max-w-xl mb-3 text-xs text-gray-500">
-        {totalResults} Treffer
+        {totalResults || 0} Treffer
       </div>
-    )}
+    
 
  
 
