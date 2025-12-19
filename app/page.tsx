@@ -6,11 +6,17 @@ import { Button, TextInput } from '@cooperateDesign'
 import { UserMenu } from './components/UserMenu'
 
 type Entity = { text: string; type: string }
+
+type highlight = {
+  title?: string
+  body?: string
+}
+
 type Result = {
   id: string
   url: string
   title: string
-  highlight?: string[]
+  highlight?: highlight
   tags?: string[]
   meta_keywords?: string[]
   entities?: Entity[]
@@ -159,7 +165,7 @@ export default function SearchPage() {
               {hit.highlight ? (
                 <p
                   className="text-gray-700 dark:text-gray-200 text-sm line-clamp-3"
-                  dangerouslySetInnerHTML={{ __html: hit.highlight[1] }}
+                  dangerouslySetInnerHTML={{ __html: hit.highlight.body ?? ''}}
                 />
               ) : (
                 <p className="text-gray-400 dark:text-gray-500 text-sm italic">
