@@ -10,8 +10,14 @@ type PageDocument = {
   content?: string
   lang?: string
   crawl_time?: string
-  images?: { url: string; alt?: string; width?: number; height?: number }[]
   tags?: string[]
+  images?: {
+    url: string
+    alt?: string
+    width?: number
+    height?: number
+  }[]
+  favicon?: string
   sponsored?: boolean
 }
 
@@ -24,11 +30,8 @@ export async function GET(req: NextRequest) {
     const size = Math.min(Number(searchParams.get('size') ?? 20), 20)
 
     if (!query || query.length < 2) {
-      return NextResponse.json({ hits: [], total: 0, page, size })
+      return NextResponse.json({ hits: [], total: 0 })
     }
-
-    const acceptLang = req.headers.get('accept-language') ?? ''
-    const preferredLang = acceptLang.startsWith('de') ? 'de' : 'en'
 
     /* ----------------------------- WEB SEARCH ---------------------------- */
     if (type === 'web') {
@@ -45,27 +48,26 @@ export async function GET(req: NextRequest) {
                   {
                     multi_match: {
                       query,
-                      fields: [
-                        'tags^6',
-                        'title^5',
-                        'meta_keywords^4',
-                        'content^2',
-                      ],
-                      type: 'best_fields',
+                      fields: ['title^4', 'tags^5', 'content^2', 'meta_keywords^3'],
                       fuzziness: 'AUTO',
-                      minimum_should_match: '75%',
+                      minimum_should_match: '70%',
                     },
                   },
-                  { term: { lang: preferredLang } },
                 ],
                 should: [
-                  { match_phrase: { title: { query, boost: 8 } } },
-                  { term: { sponsored: true, boost: 10 } },
+                  { match_phrase: { title: { query, boost: 6 } } },
+                  { term: { sponsored: true, boost: 5 } } // Sponsored boost
                 ],
               },
             },
             functions: [
-              { gauss: { crawl_time: { origin: 'now', scale: '30d', decay: 0.5 } } },
+              {
+                filter: { term: { sponsored: true } },
+                weight: 2.5,
+              },
+              {
+                gauss: { crawl_time: { origin: 'now', scale: '30d', decay: 0.5 } },
+              },
             ],
             score_mode: 'sum',
             boost_mode: 'multiply',
@@ -86,9 +88,13 @@ export async function GET(req: NextRequest) {
 
       const hits = result.hits.hits.map(hit => ({
         id: hit._id,
-        url: hit._source?.url,
+        url: hit._source?.url ?? '',
         title: hit.highlight?.title?.[0] ?? hit._source?.title ?? '',
-        snippet: hit.highlight?.content?.join(' ') ?? hit._source?.content?.slice(0, 300) ?? '',
+        snippet:
+          hit.highlight?.content?.join(' ') ??
+          hit._source?.content?.slice(0, 300) ??
+          '',
+        favicon: hit._source?.favicon ?? undefined,
         sponsored: hit._source?.sponsored ?? false,
       }))
 
@@ -106,7 +112,7 @@ export async function GET(req: NextRequest) {
           bool: {
             must: [
               { exists: { field: 'images.url' } },
-              { multi_match: { query, fields: ['title^2', 'content'], fuzziness: 'AUTO' } },
+              { multi_match: { query, fields: ['title^2', 'content'] } },
             ],
           },
         },
@@ -116,17 +122,28 @@ export async function GET(req: NextRequest) {
         hit._source?.images?.map(img => ({
           id: `${hit._id}-${img.url}`,
           imageUrl: img.url,
-          pageUrl: hit._source?.url,
+          pageUrl: hit._source?.url ?? '',
           alt: img.alt ?? hit._source?.title ?? '',
+          width: img.width,
+          height: img.height,
         })) ?? []
       )
 
-      return NextResponse.json({ hits: images, total: images.length, page, size })
+      return NextResponse.json({
+        hits: images,
+        total: images.length,
+        page,
+        size,
+        totalPages: Math.ceil(images.length / size),
+      })
     }
 
-    return NextResponse.json({ hits: [], total: 0, page, size })
+    return NextResponse.json({ hits: [], total: 0 })
   } catch (err) {
     console.error('Search API error:', err)
-    return NextResponse.json({ hits: [], total: 0, error: 'Search failed' }, { status: 500 })
+    return NextResponse.json(
+      { hits: [], total: 0, error: (err as Error).message ?? 'Search failed' },
+      { status: 500 }
+    )
   }
 }
