@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
           query,
           fields: ['title^4','content^2','meta_keywords^3','tags^5'],
           fuzziness: 'AUTO',
-          operator: 'and',
+          operator: 'or',
         },
       },
       highlight: {
