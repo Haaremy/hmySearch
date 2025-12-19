@@ -93,42 +93,15 @@ export default function SearchClient() {
         rel="noopener noreferrer"
         className="text-base font-medium text-blue-600 dark:text-blue-400 line-clamp-2"
         dangerouslySetInnerHTML={{
-          __html: hit.highlight?.title
-            ? typeof hit.highlight.title === 'string'
-              ? hit.highlight.title
-              : Array.isArray(hit.highlight.title)
-              ? hit.highlight.title.join(' ')
-              : ''
-            : hit.title
+          __html: hit.title
         }}
       />
 
       <p className="text-xs text-gray-400 truncate mb-1">{hit.url}</p>
 
-      {/* Vorschautext */}
-      {hit.highlight?.body ? (
-        <p
-          className="text-sm line-clamp-3 text-gray-700 dark:text-gray-200"
-          dangerouslySetInnerHTML={{
-            __html: typeof hit.highlight.body === 'string'
-              ? hit.highlight.body
-              : Array.isArray(hit.highlight.body)
-              ? hit.highlight.body.join(' ')
-              : ''
-          }}
-        />
-      ) : (
-        <p className="text-xs italic text-gray-400">Keine Vorschau verfügbar</p>
-      )}
+    
 
-      {/* Tags */}
-      <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
-        {hit.tags?.map(tag => (
-          <span key={tag} className="bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-blue-100 px-2 py-0.5 rounded">
-            {tag}
-          </span>
-        ))}
-      </div>
+      
     </div>
   ))}
 </div>

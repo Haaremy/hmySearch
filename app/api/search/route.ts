@@ -54,13 +54,8 @@ export async function GET(req: NextRequest) {
       body: hit._source?.content ?? '',
       lang: hit._source?.lang ?? 'unknown',
       updated_at: hit._source?.updated_at ?? '',
-      tags: hit._source?.tags ?? [],
-      meta_keywords: hit._source?.meta_keywords ?? [],
-      views: hit._source?.views ?? 0,
-      highlight: {
-        title: hit.highlight?.title?.[0] ?? null,
-        body: truncatedContent,
-      }
+
+
     }
   });
 
