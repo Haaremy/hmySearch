@@ -1,3 +1,4 @@
+// app/api/search/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { es } from '@/lib/elasticsearch'
 import nlp from 'compromise'
@@ -5,220 +6,156 @@ import stringSimilarity from 'string-similarity'
 
 export const runtime = 'nodejs'
 
-/* =======================
-   Types
-======================= */
-
 type PageDocument = {
-  url: string
-  title?: string
-  content?: string
-  lang?: string
-  updated_at?: string
-  meta_keywords?: string[]
-  tags?: string[]
-  views?: number
+url: string
+title?: string
+content?: string
+lang?: string
+updated_at?: string
+meta_keywords?: string[]
+tags?: string[]
+views?: number
 }
 
-type Entity = {
-  text: string
-  type: 'Person' | 'Place' | 'Organization' | 'Number'
-}
-
-/* =======================
-   NLP / Helpers
-======================= */
+type Entity = { text: string; type: 'Person' | 'Place' | 'Organization' | 'Number' | 'Other' }
 
 function extractEntities(text: string): Entity[] {
-  const doc = nlp(text)
-  const entities: Entity[] = []
+const doc = nlp(text)
+const entities: Entity[] = []
 
-  return entities
+doc.people().out('array').forEach((p: string) => entities.push({ text: p, type: 'Person' }))
+doc.places().out('array').forEach((p: string) => entities.push({ text: p, type: 'Place' }))
+doc.organizations().out('array').forEach((o: string) => entities.push({ text: o, type: 'Organization' }))
+doc.numbers().out('array').forEach((n: string) => entities.push({ text: n, type: 'Number' }))
+
+return entities
 }
 
 function generateSuggestions(query: string, keywords: string[]): string[] {
-  const q = query.toLowerCase()
-  return keywords
-    .filter(k => {
-      const kl = k.toLowerCase()
-      return (
-        stringSimilarity.compareTwoStrings(q, kl) > 0.6 ||
-        q.split(/\s+/).some(w => kl.includes(w))
-      )
-    })
-    .slice(0, 5)
+const suggestions: string[] = []
+const lowerQuery = query.toLowerCase()
+
+keywords.forEach(k => {
+const lowerK = k.toLowerCase()
+const similarity = stringSimilarity.compareTwoStrings(lowerQuery, lowerK)
+if (similarity > 0.6 && !suggestions.includes(k)) suggestions.push(k)
+lowerQuery.split(/\s+/).forEach(w => {
+if (lowerK.includes(w) && !suggestions.includes(k)) suggestions.push(k)
+})
+})
+
+return suggestions.slice(0, 5)
 }
 
-/* =======================
-   API Handler
-======================= */
-
 export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const query = searchParams.get('q')?.trim()
-    if (!query || query.length < 2) {
-      return NextResponse.json({ hits: [], suggestions: [], total: 0 })
-    }
+try {
+const { searchParams } = new URL(req.url)
+const query = searchParams.get('q')?.trim()
+if (!query || query.length < 2) return NextResponse.json({ hits: [], suggestions: [] })
 
-    const size = Math.min(Number(searchParams.get('size') ?? 20), 50)
-    const lastSort = searchParams.get('lastSort') || undefined
-    const queryTerms = query.toLowerCase().split(/\s+/)
+const page = Math.max(0, Number(searchParams.get('page') ?? 0))
+const size = Math.min(Number(searchParams.get('size') ?? 20), 50)
 
-    /* =======================
-       Elasticsearch Query
-    ======================= */
+const result = await es.search<PageDocument>({
+index: 'pages',
+from: page * size,
+size,
+query: {
+multi_match: {
+query,
+fields: ['title^4', 'content^2', 'meta_keywords^3', 'tags^5'],
+fuzziness: 'AUTO',
+operator: 'and',
+},
+},
+highlight: {
+fields: {
+title: { fragment_size: 150, number_of_fragments: 1 },
+content: { fragment_size: 150, number_of_fragments: 2 },
+},
+},
+timeout: '2s',
+})
 
-    const esResult = await es.search<PageDocument>({
-      index: 'pages',
-      size,
-      track_total_hits: true,
-      _source: [
-        'url',
-        'title',
-        'content',
-        'tags',
-        'meta_keywords',
-        'views',
-        'updated_at',
-        'lang',
-      ],
-      sort: [{ _id: 'asc' }],
-      query: {
-        bool: {
-          should: [
-            {
-              match: {
-                title: {
-                  query,
-                  boost: 4,
-                  fuzziness: 'AUTO',
-                },
-              },
-            },
-            {
-              match: {
-                content: {
-                  query,
-                  boost: 2,
-                  fuzziness: 'AUTO',
-                },
-              },
-            },
-            {
-              terms: {
-                tags: queryTerms,
-                boost: 5,
-              },
-            },
-            {
-              terms: {
-                meta_keywords: queryTerms,
-                boost: 3,
-              },
-            },
-          ],
-          minimum_should_match: 1,
-        },
-      },
-      highlight: {
-        fields: {
-          title: {},
-          content: { fragment_size: 120, number_of_fragments: 2 },
-        },
-      },
-      ...(lastSort ? { search_after: [lastSort] } : {}),
-      timeout: '2s',
-    })
+const hitsRaw = result.hits.hits.filter(hit => hit._source)
 
-    /* =======================
-       Result Processing
-    ======================= */
+// Deduplication nach URL
+const hitsMap: Record<string, typeof hitsRaw[0]> = {}
+hitsRaw.forEach(hit => {
+const url = hit._source!.url
+if (!hitsMap[url]) hitsMap[url] = hit
+})
+const uniqueHits = Object.values(hitsMap)
 
-    const rawHits = esResult.hits.hits.filter(h => h._source)
+const hits = uniqueHits.map(hit => {
+const source = hit._source!
+const body = source.content ?? ''
+const lang = source.lang ?? 'unknown'
+const updated_at = source.updated_at ?? ''
 
-    // Dedup by URL
-    const dedupMap: Record<string, typeof rawHits[0]> = {}
-    rawHits.forEach(h => {
-      dedupMap[h._source!.url] ||= h
-    })
+const entities = extractEntities(body)
+const matchScore = hit._score ?? 0
+const popularityScore = Math.log1p(source.views ?? 0)
+const freshnessScore = updated_at
+? 1 / (1 + (Date.now() - new Date(updated_at).getTime()) / 86400000)
+: 0
+const tagScore = source.tags?.reduce(
+(acc, t) => (query.toLowerCase().includes(t.toLowerCase()) ? acc + 2 : acc),
+0,
+) ?? 0
+const keywordScore = source.meta_keywords?.reduce(
+(acc, k) => (query.toLowerCase().includes(k.toLowerCase()) ? acc + 1.5 : acc),
+0,
+) ?? 0
+const contentLengthScore = Math.min(body.length / 1000, 5)
+const entityScore = entities.reduce(
+(acc, e) => (query.toLowerCase().includes(e.text.toLowerCase()) ? acc + 2 : acc),
+0,
+)
 
-    const uniqueHits = Object.values(dedupMap)
+const finalScore =
+matchScore * 1.5 +
+popularityScore * 2 +
+freshnessScore * 3 +
+tagScore +
+keywordScore +
+contentLengthScore +
+entityScore
 
-    const hits = uniqueHits.map((hit, idx) => {
-      const src = hit._source!
-      const body = src.content ?? ''
-      const updatedAt = src.updated_at ? new Date(src.updated_at).getTime() : 0
-      const entities = idx < 5 ? extractEntities(body) : []
+return {
+id: hit._id,
+url: source.url,
+title: source.title ?? '',
+body,
+lang,
+updated_at,
+tags: source.tags ?? [],
+meta_keywords: source.meta_keywords ?? [],
+views: source.views ?? 0,
+entities,
+finalScore,
+highlight: {
+title: hit.highlight?.title?.[0] ?? null,
+body: hit.highlight?.content ?? [],
+},
+}
+})
 
-      const matchScore = hit._score ?? 0
-      const popularityScore = Math.log1p(src.views ?? 0)
-      const freshnessScore = updatedAt
-        ? 1 / (1 + (Date.now() - updatedAt) / 86400000)
-        : 0
-      const tagScore =
-        src.tags?.reduce(
-          (acc, t) => (query.toLowerCase().includes(t.toLowerCase()) ? acc + 2 : acc),
-          0,
-        ) ?? 0
-      const keywordScore =
-        src.meta_keywords?.reduce(
-          (acc, k) => (query.toLowerCase().includes(k.toLowerCase()) ? acc + 1.5 : acc),
-          0,
-        ) ?? 0
-      const contentLengthScore = Math.min(body.length / 1000, 5)
-      const entityScore = entities.reduce(
-        (acc, e) => (query.toLowerCase().includes(e.text.toLowerCase()) ? acc + 2 : acc),
-        0,
-      )
+const allKeywords = hits.flatMap(h => [...(h.tags ?? []), ...(h.meta_keywords ?? [])])
+const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
 
-      const finalScore =
-        matchScore * 1.5 +
-        popularityScore * 2 +
-        freshnessScore * 3 +
-        tagScore +
-        keywordScore +
-        contentLengthScore +
-        entityScore
+const totalHits =
+typeof result.hits.total === 'number'
+? result.hits.total
+: result.hits.total?.value ?? 0
 
-      return {
-        id: hit._id,
-        url: src.url,
-        title: src.title ?? '',
-        body,
-        lang: src.lang ?? 'unknown',
-        updated_at: src.updated_at ?? '',
-        tags: src.tags ?? [],
-        meta_keywords: src.meta_keywords ?? [],
-        views: src.views ?? 0,
-        entities,
-        finalScore,
-        highlight: {
-          title: hit.highlight?.title?.[0] ?? null,
-          body: hit.highlight?.content ?? [],
-        },
-        sort: hit.sort?.[0] ?? null,
-      }
-    })
+return NextResponse.json({ hits, suggestions, page, size, total: totalHits })
 
-    const allKeywords = hits.flatMap(h => [...h.tags, ...h.meta_keywords])
-    const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
-
-    return NextResponse.json({
-      hits,
-      suggestions,
-      total:
-        typeof esResult.hits.total === 'number'
-          ? esResult.hits.total
-          : esResult.hits.total?.value ?? 0,
-      size,
-      lastSort: hits[hits.length - 1]?.sort ?? null,
-    })
-  } catch (err) {
-    console.error('Search API error:', err)
-    return NextResponse.json(
-      { hits: [], suggestions: [], total: 0, error: 'Search failed' },
-      { status: 500 },
-    )
-  }
+} catch (err) {
+console.error('Search API error:', err)
+return NextResponse.json(
+{ hits: [], suggestions: [], page: 0, size: 0, total: 0, error: 'Search failed' },
+{ status: 500 },
+)
+}
 }
