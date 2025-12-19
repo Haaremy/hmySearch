@@ -125,11 +125,23 @@ export default function SearchPage() {
       {loading && <p className="text-gray-600 dark:text-gray-300 mb-4">Suche läuft…</p>}
 
       {/* Trefferliste */}
-      <div className="w-full max-w-2xl grid gap-4">
+      <div className="w-full max-w-4xl grid gap-4">
+
         {results.map(hit => (
           <div
             key={hit.id}
-            className="bg-white dark:bg-gray-800 rounded shadow-sm p-4 hover:shadow-md transition-shadow flex flex-col min-h-[180px]"
+            className="
+              w-full
+              bg-white dark:bg-gray-800
+              rounded
+              shadow-sm
+              p-4
+              hover:shadow-md
+              transition-shadow
+              flex flex-col
+              min-h-[200px]
+            "
+
           >
             {/* Titel + URL */}
             <a
@@ -143,12 +155,19 @@ export default function SearchPage() {
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 truncate">{hit.url}</p>
 
             {/* Highlight */}
-            {hit.highlight && (
-              <p
-                className="text-gray-700 dark:text-gray-200 text-sm mb-2 line-clamp-3"
-                dangerouslySetInnerHTML={{ __html: hit.highlight }}
-              />
-            )}
+            <div className="min-h-[4rem] mb-2">
+              {hit.highlight ? (
+                <p
+                  className="text-gray-700 dark:text-gray-200 text-sm line-clamp-3"
+                  dangerouslySetInnerHTML={{ __html: hit.highlight }}
+                />
+              ) : (
+                <p className="text-gray-400 dark:text-gray-500 text-sm italic">
+                  Kein Vorschautext verfügbar
+                </p>
+              )}
+            </div>
+
 
             {/* Tags + Meta-Keywords */}
             <div className="flex flex-wrap gap-1 mb-2">

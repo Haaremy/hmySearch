@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
 type PageDocument = {
   url: string
   title?: string
-  body?: string
+  content?: string
   lang?: string
   updated_at?: string
   meta_keywords?: string[]
@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
     if (!query || query.length < 2) return NextResponse.json({ hits: [], suggestions: [] })
 
     const page = Math.max(0, Number(searchParams.get('page') ?? 0))
-    const size = Math.min(Number(searchParams.get('size') ?? 10), 50)
+    const size = Math.min(Number(searchParams.get('size') ?? 20), 50)
 
     const result = await es.search<PageDocument>({
       index: 'pages',
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
       query: {
         multi_match: {
           query,
-          fields: ['title^4', 'body^2', 'meta_keywords^3', 'tags^5'],
+          fields: ['title^4', 'content^2', 'meta_keywords^3', 'tags^5'],
           fuzziness: 'AUTO',
           operator: 'and',
         },
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       highlight: {
         fields: {
           title: { fragment_size: 150, number_of_fragments: 1 },
-          body: { fragment_size: 150, number_of_fragments: 2 },
+          content: { fragment_size: 150, number_of_fragments: 2 },
         },
       },
       timeout: '2s',
@@ -89,7 +89,7 @@ export async function GET(req: NextRequest) {
 
     const hits = uniqueHits.map(hit => {
       const source = hit._source!
-      const body = source.body ?? ''
+      const body = source.content ?? ''
       const lang = source.lang ?? 'unknown'
       const updated_at = source.updated_at ?? ''
 
@@ -136,7 +136,7 @@ export async function GET(req: NextRequest) {
         finalScore,
         highlight: {
           title: hit.highlight?.title?.[0] ?? null,
-          body: hit.highlight?.body ?? [],
+          body: hit.highlight?.content ?? [],
         },
       }
     })

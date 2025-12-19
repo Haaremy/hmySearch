@@ -6,10 +6,10 @@ import { Metadata } from 'next';
 //import { redirect } from 'next/navigation';
 //import "./globals.css";
 export const metadata: Metadata = {
-  title: "Websuche",
+  title: "hmySearch - by Haaremy",
   description: "Websuche im deutschen und englischen Raum. Website und Implementierung von @Haaremy.",
    icons: {
-    icon: "/logo.svg",
+    icon: "/logo_wk.svg",
   },
 };
 
