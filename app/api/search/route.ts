@@ -6,10 +6,6 @@ import stringSimilarity from 'string-similarity'
 
 export const runtime = 'nodejs'
 
-/* =========================
-   Types
-========================= */
-
 type PageDocument = {
   url: string
   title?: string
@@ -21,85 +17,44 @@ type PageDocument = {
   views?: number
 }
 
-type Entity = {
-  text: string
-  type: 'Person' | 'Place' | 'Organization' | 'Number'
-}
-
-/* =========================
-   Optional Entity Extraction
-========================= */
+type Entity = { text: string; type: 'Person' | 'Place' | 'Organization' | 'Number' | 'Other' }
 
 function extractEntities(text: string): Entity[] {
   const doc = nlp(text)
   const entities: Entity[] = []
 
-doc.people().out('array').forEach((p: string) => entities.push({ text: p, type: 'Person' }))
-doc.places().out('array').forEach((p: string) => entities.push({ text: p, type: 'Place' }))
-doc.organizations().out('array').forEach((o: string) => entities.push({ text: o, type: 'Organization' }))
-doc.numbers().out('array').forEach((n: string) => entities.push({ text: n, type: 'Number' }))
-
   return entities
 }
 
-/* =========================
-   Suggestions
-========================= */
-
 function generateSuggestions(query: string, keywords: string[]): string[] {
-  const q = query.toLowerCase()
-  const suggestions = new Set<string>()
+  const suggestions: string[] = []
+  const lowerQuery = query.toLowerCase()
 
-  for (const k of keywords) {
-    const lk = k.toLowerCase()
-    if (stringSimilarity.compareTwoStrings(q, lk) > 0.6) {
-      suggestions.add(k)
-      continue
-    }
-    for (const w of q.split(/\s+/)) {
-      if (lk.includes(w)) suggestions.add(k)
-    }
-  }
+  keywords.forEach(k => {
+    const lowerK = k.toLowerCase()
+    const similarity = stringSimilarity.compareTwoStrings(lowerQuery, lowerK)
+    if (similarity > 0.6 && !suggestions.includes(k)) suggestions.push(k)
+    lowerQuery.split(/\s+/).forEach(w => {
+      if (lowerK.includes(w) && !suggestions.includes(k)) suggestions.push(k)
+    })
+  })
 
-  return Array.from(suggestions).slice(0, 5)
+  return suggestions.slice(0, 5)
 }
-
-/* =========================
-   GET Handler
-========================= */
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-
     const query = searchParams.get('q')?.trim()
-    if (!query || query.length < 2) {
-      return NextResponse.json({ hits: [], suggestions: [], total: 0 })
-    }
+    if (!query || query.length < 2) return NextResponse.json({ hits: [], suggestions: [], total: 0 })
 
     const page = Math.max(0, Number(searchParams.get('page') ?? 0))
-    const size = Math.min(Number(searchParams.get('size') ?? 20), 50)
-    const withEntities = searchParams.get('entities') === '1'
-
-    /* =========================
-       Elasticsearch Query
-    ========================= */
+    const size = Math.min(Number(searchParams.get('size') ?? 20), 20) // max 20
 
     const result = await es.search<PageDocument>({
       index: 'pages',
       from: page * size,
       size,
-
-      _source: [
-        'url',
-        'title',
-        'lang',
-        'updated_at',
-        'meta_keywords',
-        'tags',
-        'views',
-      ],
-
       query: {
         function_score: {
           query: {
@@ -121,8 +76,8 @@ export async function GET(req: NextRequest) {
             {
               gauss: {
                 updated_at: {
-                  scale: '30d',
                   origin: 'now',
+                  scale: '30d',
                 },
               },
               weight: 3,
@@ -131,88 +86,55 @@ export async function GET(req: NextRequest) {
           boost_mode: 'sum',
         },
       },
-
-      collapse: {
-        field: 'url.keyword',
-      },
-
       highlight: {
-        pre_tags: ['<mark>'],
-        post_tags: ['</mark>'],
         fields: {
-          title: { number_of_fragments: 1, fragment_size: 150 },
-          content: { number_of_fragments: 1, fragment_size: 160 },
+          title: { fragment_size: 150, number_of_fragments: 1 },
+          content: { fragment_size: 150, number_of_fragments: 2 },
         },
       },
-
-      timeout: '1s',
+      timeout: '2s',
     })
 
-    /* =========================
-       Transform Hits
-    ========================= */
+    const hitsRaw = result.hits.hits.filter(hit => hit._source)
 
-    const hits = result.hits.hits.map(hit => {
+    const hits = hitsRaw.map(hit => {
       const source = hit._source!
-      const highlightTitle = hit.highlight?.title?.[0] ?? null
-      const highlightBody = hit.highlight?.content?.[0] ?? null
+      const body = source.content ?? ''
+      const entities = extractEntities(body)
+      const updated_at = source.updated_at ?? ''
+      const finalScore = hit._score ?? 0
 
       return {
         id: hit._id,
         url: source.url,
         title: source.title ?? '',
+        body,
         lang: source.lang ?? 'unknown',
-        updated_at: source.updated_at ?? null,
+        updated_at,
         tags: source.tags ?? [],
         meta_keywords: source.meta_keywords ?? [],
         views: source.views ?? 0,
-        finalScore: hit._score ?? 0,
-
-        highlight: highlightTitle || highlightBody
-          ? {
-              title: highlightTitle,
-              body: highlightBody,
-            }
-          : null,
-
-        entities: withEntities && highlightBody
-          ? extractEntities(highlightBody)
-          : [],
+        entities,
+        finalScore,
+        highlight: {
+          title: hit.highlight?.title?.[0] ?? null,
+          body: hit.highlight?.content?.join(' ') ?? null,
+        },
       }
     })
 
-    /* =========================
-       Suggestions
-    ========================= */
+    const allKeywords = hits.flatMap(h => [...h.tags, ...h.meta_keywords])
+    const suggestions = generateSuggestions(query, Array.from(new Set(allKeywords)))
+    const totalHits = typeof result.hits.total === 'number' ? result.hits.total : result.hits.total?.value ?? 0
 
-    const allKeywords = hits.flatMap(h => [
-      ...(h.tags ?? []),
-      ...(h.meta_keywords ?? []),
-    ])
-
-    const suggestions = generateSuggestions(
-      query,
-      Array.from(new Set(allKeywords)),
-    )
-
-    const total =
-      typeof result.hits.total === 'number'
-        ? result.hits.total
-        : result.hits.total?.value ?? 0
-
-    return NextResponse.json({
-      hits,
-      suggestions,
-      page,
-      size,
-      total,
-    })
+    return NextResponse.json({ hits, suggestions, total: totalHits })
   } catch (err: unknown) {
-      if (err instanceof Error) {
-        console.error('Search API error:', err.message)
-      } else {
-        console.error('Search API unknown error:', err)
-      }
-    }
+    if (err instanceof Error) console.error('Search API error:', err.message)
+    else console.error('Search API unknown error:', err)
 
+    return NextResponse.json(
+      { hits: [], suggestions: [], total: 0, error: 'Search failed' },
+      { status: 500 }
+    )
+  }
 }
