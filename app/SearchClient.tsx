@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Button, TextInput } from '@cooperateDesign'
 
@@ -53,7 +53,6 @@ export default function SearchClient() {
       </div>
 
       {totalResults !== null && <p>{totalResults} Treffer</p>}
-
       {loading && <p>Suche läuft…</p>}
 
       <ul>
