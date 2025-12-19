@@ -77,33 +77,7 @@ export default function SearchClient() {
         {totalResults !== null && <span>{totalResults} Treffer</span>}
       </div>
 
-      {/* Ergebnisse */}
-      <div className="w-full max-w-xl grid gap-3">
-        {results.map(hit => (
-          <div key={hit.id} className="bg-white dark:bg-gray-800 rounded p-3 shadow-sm">
-            <a
-              href={hit.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-base font-medium text-blue-600 dark:text-blue-400 line-clamp-2"
-            >
-              {hit.highlight?.title ?? hit.title ?? hit.url}
-            </a>
-            {hit.highlight?.body && typeof hit.highlight.body === 'string' && (
-              <p className="text-sm text-gray-700 dark:text-gray-200 line-clamp-3" dangerouslySetInnerHTML={{ __html: hit.highlight.body }} />
-            )}
-            {hit.tags && hit.tags.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
-                {hit.tags.map(tag => (
-                  <span key={tag} className="bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-blue-100 px-2 py-0.5 rounded">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+      
 
       {loading && <p className="mt-4 text-gray-500">Suche läuft…</p>}
     </div>
