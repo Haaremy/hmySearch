@@ -80,22 +80,7 @@ export default function SearchClient() {
         </div>
       )}
 
-      {/* Ergebnisse */}
-      <div className="w-full grid gap-3 max-w-xl">
-        {results.map(hit => (
-          <div key={hit.id} className="bg-white dark:bg-gray-800 rounded p-3 shadow-sm w-full">
-            <a
-              href={hit.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-base font-medium text-blue-600 dark:text-blue-400 line-clamp-2"
-            >
-              {hit.highlight?.title || hit.title || hit.url}
-            </a>
-            <p className="text-xs text-gray-400 truncate mb-1">{hit.url}</p>
-          </div>
-        ))}
-      </div>
+      
 
       {loading && <p className="mt-4 text-gray-500">Suche läuft…</p>}
     </div>
