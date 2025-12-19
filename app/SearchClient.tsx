@@ -139,6 +139,7 @@ export default function SearchClient() {
               </p>
             )}
 
+
             <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500 dark:text-gray-400">
               {hit.tags?.map(tag => (
                 <span key={tag} className="bg-blue-100 dark:bg-blue-700 text-blue-800 dark:text-blue-100 px-2 py-0.5 rounded">

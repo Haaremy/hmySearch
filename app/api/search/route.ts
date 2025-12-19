@@ -55,8 +55,8 @@ export async function GET(req: NextRequest) {
       views: hit._source?.views ?? 0,
       highlight: {
         title: hit.highlight?.title?.[0] ?? null,
-        body: hit.highlight?.content?.join(' ') ?? null,
-      },
+        body: hit.highlight?.content?.join(' ') ?? null, // Array → String
+      }
     }))
 
     return NextResponse.json({
