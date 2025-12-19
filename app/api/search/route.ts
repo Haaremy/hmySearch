@@ -10,19 +10,14 @@ type PageDocument = {
   content?: string
   lang?: string
   crawl_time?: string
-  images?: {
-    url: string
-    alt?: string
-    width?: number
-    height?: number
-  }[]
+  images?: { url: string; alt?: string; width?: number; height?: number }[]
   tags?: string[]
+  sponsored?: boolean
 }
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-
     const query = searchParams.get('q')?.trim()
     const type = searchParams.get('type') ?? 'web'
     const page = Math.max(0, Number(searchParams.get('page') ?? 0))
@@ -32,7 +27,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ hits: [], total: 0, page, size })
     }
 
-    // bevorzugte Sprache aus Accept-Language
     const acceptLang = req.headers.get('accept-language') ?? ''
     const preferredLang = acceptLang.startsWith('de') ? 'de' : 'en'
 
@@ -52,39 +46,26 @@ export async function GET(req: NextRequest) {
                     multi_match: {
                       query,
                       fields: [
-                        'tags^5',
-                        'title^4',
-                        'meta_keywords^3',
+                        'tags^6',
+                        'title^5',
+                        'meta_keywords^4',
                         'content^2',
                       ],
                       type: 'best_fields',
-                      operator: 'and', // Stopwords werden ignoriert
                       fuzziness: 'AUTO',
-                      minimum_should_match: '70%',
+                      minimum_should_match: '75%',
                     },
                   },
+                  { term: { lang: preferredLang } },
                 ],
                 should: [
-                  {
-                    match_phrase: {
-                      title: { query, boost: 6 },
-                    },
-                  },
+                  { match_phrase: { title: { query, boost: 8 } } },
+                  { term: { sponsored: true, boost: 10 } },
                 ],
               },
             },
             functions: [
-              // Sprachboost
-              {
-                filter: { term: { 'lang.keyword': preferredLang } },
-                weight: 2.5,
-              },
-              // Aktualität-Boost
-              {
-                gauss: {
-                  crawl_time: { origin: 'now', scale: '30d', decay: 0.5 },
-                },
-              },
+              { gauss: { crawl_time: { origin: 'now', scale: '30d', decay: 0.5 } } },
             ],
             score_mode: 'sum',
             boost_mode: 'multiply',
@@ -103,25 +84,15 @@ export async function GET(req: NextRequest) {
           ? result.hits.total
           : result.hits.total?.value ?? 0
 
-      const hits = result.hits.hits.map(hit => {
-        const cleanContent = hit._source?.content?.replace(/<[^>]+>/g, '') ?? ''
-        return {
-          id: hit._id,
-          score: hit._score,
-          url: hit._source?.url,
-          title: hit.highlight?.title?.[0] ?? hit._source?.title ?? '',
-          snippet: hit.highlight?.content?.join(' ') ?? cleanContent.slice(0, 300),
-          lang: hit._source?.lang,
-        }
-      })
+      const hits = result.hits.hits.map(hit => ({
+        id: hit._id,
+        url: hit._source?.url,
+        title: hit.highlight?.title?.[0] ?? hit._source?.title ?? '',
+        snippet: hit.highlight?.content?.join(' ') ?? hit._source?.content?.slice(0, 300) ?? '',
+        sponsored: hit._source?.sponsored ?? false,
+      }))
 
-      return NextResponse.json({
-        hits,
-        total,
-        page,
-        size,
-        totalPages: Math.ceil(total / size),
-      })
+      return NextResponse.json({ hits, total, page, size, totalPages: Math.ceil(total / size) })
     }
 
     /* ---------------------------- IMAGE SEARCH ---------------------------- */
@@ -135,13 +106,7 @@ export async function GET(req: NextRequest) {
           bool: {
             must: [
               { exists: { field: 'images.url' } },
-              {
-                multi_match: {
-                  query,
-                  fields: ['title^2', 'content'],
-                  fuzziness: 'AUTO',
-                },
-              },
+              { multi_match: { query, fields: ['title^2', 'content'], fuzziness: 'AUTO' } },
             ],
           },
         },
@@ -156,20 +121,12 @@ export async function GET(req: NextRequest) {
         })) ?? []
       )
 
-      return NextResponse.json({
-        hits: images,
-        total: images.length,
-        page,
-        size,
-      })
+      return NextResponse.json({ hits: images, total: images.length, page, size })
     }
 
     return NextResponse.json({ hits: [], total: 0, page, size })
   } catch (err) {
     console.error('Search API error:', err)
-    return NextResponse.json(
-      { hits: [], total: 0, error: 'Search failed' },
-      { status: 500 }
-    )
+    return NextResponse.json({ hits: [], total: 0, error: 'Search failed' }, { status: 500 })
   }
 }
